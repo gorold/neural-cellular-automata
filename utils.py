@@ -1,8 +1,5 @@
-import os, io, base64, zipfile, json, requests, glob
-import PIL.Image, PIL.ImageDraw
-import numpy as np
-import matplotlib.pylab as pl
-
+import os, io, requests
+import PIL.Image
 import numpy as np
 
 import torch

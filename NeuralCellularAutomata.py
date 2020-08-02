@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-class NCA(nn.Module):
+class GrowingNCA(nn.Module):
     """
     Attributes
     ----------

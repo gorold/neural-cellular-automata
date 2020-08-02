@@ -65,7 +65,7 @@ def run():
 
     device = torch.device('cuda' if opt.cuda else 'cpu')
 
-    nca = NCA(device, channel_n=opt.channel_n, fire_rate=opt.fire_rate, hidden_size=opt.hidden_size)
+    nca = GrowingNCA(device, channel_n=opt.channel_n, fire_rate=opt.fire_rate, hidden_size=opt.hidden_size)
     optimizer = optim.Adam(nca.parameters(), lr=opt.lr, betas=(opt.beta1, opt.beta2))
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, opt.gamma)
 
