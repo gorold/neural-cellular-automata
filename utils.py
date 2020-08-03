@@ -1,6 +1,8 @@
 import os, io, requests
+from errno import EEXIST
 import PIL.Image
 import numpy as np
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn.functional as F
@@ -68,7 +70,7 @@ def to_alpha(x):
     tensor
         Tensor of size (batch, 1, h, w).
     """
-    return x[:, 3:4, ...].clamp(min=0, max=1)
+    return x[:, 3:4, ...].clamp(min=0.0, max=1.0)
 
 def to_rgb(x):
     """
@@ -83,55 +85,13 @@ def to_rgb(x):
         Tensor of size (batch, 3, h, w).
     """
     rgb, a = x[:, :3, ...], to_alpha(x)
-    return 1.0 - a + rgb
+    return (1.0 - a + rgb).clamp(min=0.0, max=1.0)
 
 def pad_target(target, p=16):
     """
     Pads target with p pixels in top-bottom and left-right dimensions.
     """
     return F.pad(target, [p//2, p//2, p//2, p//2, 0, 0])
-
-class SamplePool:
-    """
-    Creates a pool of samples to sample from.
-    The keyword argument **slots make up the attributes which will be sampled.
-    """
-
-    def __init__(self, *, _parent=None, _parent_idx=None, **slots):
-        self._parent = _parent
-        self._parent_idx = _parent_idx
-        self._slot_names = slots.keys()
-        self._size = None
-        for k, v in slots.items():
-            if self._size is None:
-                self._size = v.size(0)
-            assert self._size == v.size(0)
-            setattr(self, k, torch.as_tensor(v))
-
-    def sample(self, n):
-        """
-        For each attribute (from self._slot_names), sample n and create a new SamplePool object to hold them.
-        Attributes must be indexable.
-        """
-        idx = np.random.choice(self._size, n, False)
-        batch = {k: getattr(self, k)[idx] for k in self._slot_names}
-        batch = SamplePool(**batch, _parent=self, _parent_idx=idx)
-        return batch
-
-    def replace(self, **new_slots):
-        """
-        Replace current samples with new values.
-        """
-        for k, v in new_slots.items():
-            assert k in self._slot_names
-            getattr(self, k)[:] = v
-
-    def commit(self):
-        """
-        Commit the parent's indexed attribute with the child's attribute.
-        """
-        for k in self._slot_names:
-            getattr(self._parent, k)[self._parent_idx] = getattr(self, k)
 
 def make_seed(size, num_seeds, channel_n):
     """
@@ -186,3 +146,54 @@ def make_circle_masks(n, h, w):
     y = (y - center[1]) / r # y.shape = (n, h, 1)
     mask = (x * x + y * y < 1.0).float() # mask.shape = (n, h, w)
     return mask
+
+def mkdir_p(mypath):
+    """
+    Creates a directory. equivalent to using mkdir -p on the command line
+    """
+    try:
+        os.makedirs(mypath)
+    except OSError as exc: # Python >2.5
+        if exc.errno == EEXIST and os.path.isdir(mypath):
+            pass
+        else: raise
+    return mypath
+
+def viz_batch(x0, x, save_path, start_e, end_e):
+    """
+    Save visualizations from a single update sequence.
+
+    Parameters
+    ----------
+    x0: tensor
+        Initial input cell state.
+    x: tensor
+        Cell state output.
+    """
+    vis0 = to_rgb(x0).transpose(1,2).transpose(2,3)
+    vis1 = to_rgb(x).transpose(1,2).transpose(2,3)
+
+    plt.figure(figsize=[15, 5])
+    for i in range(x0.size(0)):
+        plt.subplot(2, x0.size(0), i+1)
+        plt.imshow(vis0[i])
+        plt.axis('off')
+    for i in range(x.size(0)):
+        plt.subplot(2, x0.size(0), i+1+x0.size(0))
+        plt.imshow(vis1[i])
+        plt.axis('off')
+
+    save_path = mkdir_p(os.path.join(save_path, 'batch_viz'))
+    save_path = os.path.join(save_path, f'epoch_{start_e}_{end_e}.png')
+    plt.savefig(save_path)
+    plt.close()
+
+def viz_loss(losses, save_path, start_e, end_e):
+    plt.figure(figsize=(10, 4))
+    plt.title('Loss history (log10)')
+    plt.plot(torch.log10(torch.as_tensor(losses)), 'b-', alpha=0.5)
+    
+    save_path = mkdir_p(os.path.join(save_path, 'losses'))
+    save_path = os.path.join(save_path, f'epoch_{start_e}_{end_e}.png')
+    plt.savefig(save_path)
+    plt.close()

@@ -17,7 +17,7 @@ class GrowingNCA(nn.Module):
     """
 
     def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128):
-        super(NCA, self).__init__()
+        super(GrowingNCA, self).__init__()
         assert fire_rate > 0 and fire_rate <= 1
 
         self.update_rules = nn.Sequential(OrderedDict([
@@ -134,12 +134,12 @@ class GrowingNCA(nn.Module):
         dx = self.update_rules(y) * step_size
 
         stochastic_mask = torch.rand([dx.size(0), 1, dx.size(2), dx.size(3)]) > fire_rate
-        stochastic_mask.float().to(self.device)
-        x += (dx * stochastic_mask)
+        stochastic_mask = stochastic_mask.float().to(self.device)
+        x =  x + (dx * stochastic_mask)
 
         post_life_mask = self.alive(x)
         life_mask = (pre_life_mask & post_life_mask).float() 
-        x *= life_mask
+        x = x * life_mask
 
         return x
 
@@ -150,3 +150,12 @@ class GrowingNCA(nn.Module):
         for step in range(steps):
             x = self.update(x, fire_rate, angle, step_size)
         return x
+
+class NewNCA(nn.Module):
+    
+    def __init__(self, ):
+        super(NewNCA, self).__init__()
+
+    def forward(self, x):
+        pass
+    

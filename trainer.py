@@ -2,29 +2,49 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
-import matplotlib.pyplot as plt
-
 from utils import *
 
-def viz_batch(x0, x):
-    vis0 = to_rgb(x0).transpose(1,2).transpose(2,3)
-    vis1 = to_rgb(x).transpose(1,2).transpose(2,3)
-    plt.figure(figsize=[15, 5])
-    for i in range(x0.size(0)):
-        plt.subplot(2, x0.size(0), i+1)
-        plt.imshow(vis0[i])
-        plt.axis('off')
-    for i in range(x.size(0)):
-        plt.subplot(2, x0.size(0), i+1+x0.size(0))
-        plt.imshow(vis1[i])
-        plt.axis('off')
-    plt.show()
+class SamplePool:
+    """
+    Creates a pool of samples to sample from.
+    The keyword argument **slots make up the attributes which will be sampled.
+    """
 
-def viz_loss(losses):
-    plt.figure(figsize=(10, 4))
-    plt.title('Loss history (log10)')
-    plt.plot(torch.log10(torch.as_tensor(losses)), '.', alpha=0.1)
-    plt.show()
+    def __init__(self, *, _parent=None, _parent_idx=None, **slots):
+        self._parent = _parent
+        self._parent_idx = _parent_idx
+        self._slot_names = slots.keys()
+        self._size = None
+        for k, v in slots.items():
+            if self._size is None:
+                self._size = v.size(0)
+            assert self._size == v.size(0)
+            setattr(self, k, torch.as_tensor(v))
+
+    def sample(self, n):
+        """
+        For each attribute (from self._slot_names), sample n and create a new SamplePool object to hold them.
+        Attributes must be indexable.
+        """
+        idx = np.random.choice(self._size, n, False)
+        batch = {k: getattr(self, k)[idx] for k in self._slot_names}
+        batch = SamplePool(**batch, _parent=self, _parent_idx=idx)
+        return batch
+
+    def replace(self, **new_slots):
+        """
+        Replace current samples with new values.
+        """
+        for k, v in new_slots.items():
+            assert k in self._slot_names
+            getattr(self, k)[:] = v
+
+    def commit(self):
+        """
+        Commit the parent's indexed attribute with the child's attribute.
+        """
+        for k in self._slot_names:
+            getattr(self._parent, k)[self._parent_idx] = getattr(self, k)
 
 def train_step(nca, x, target, steps, optimizer, scheduler):
     nca.train()
@@ -48,16 +68,18 @@ def rank_losses(x, target):
     loss = torch.mean(torch.pow(to_rgba(x) - target, 2), dim=[1, 2, 3])
     return torch.argsort(loss, descending=True)
 
-def pool_train(nca, target, optimizer, scheduler, epochs, device, pool_size, batch_size, damage_n):
+def pool_train(nca, target, optimizer, scheduler, epochs, device, pool_size, batch_size, damage_n, fig_dir, model_path, save_epoch=100):
     """
+    Training procedure using the 'sample pool' training strategy.
 
     Parameters
     ----------
+    nca
+        Neural Cellular Automata model
     target: tensor, (4, h, w)
-        Premultiplied
-    
+        Tensor representing the target image. Assumed to be premultiplied RGBA.
     """
-    target = pad_target(target) # (4, h+16, w+16)
+    target = pad_target(target).to(device) # (4, h+16, w+16)
     h, w = target.size(1), target.size(2)
     seed = make_seed((h, w), pool_size, nca.channel_n).to(device)
     pool = SamplePool(x=seed)
@@ -85,7 +107,14 @@ def pool_train(nca, target, optimizer, scheduler, epochs, device, pool_size, bat
         losses.append(loss.detach().cpu())
 
         print(f'Loss (epoch {epoch}): {loss.item()}')
+        start_epoch = 1
+        if epoch % save_epoch == 0 or epoch == epochs:
 
-        if epoch % 10 == 0 or epoch == 1 or epoch == epochs:
-            viz_batch(x0.detach().cpu(), x.detach().cpu())
-            viz_loss(losses)
+            # Save visualizations
+            viz_batch(x0.detach().cpu(), x.detach().cpu(), fig_dir, start_epoch, epoch)
+            viz_loss(losses, fig_dir, start_epoch, epoch)
+
+            # Save model
+            torch.save(nca.state_dict(), model_path)
+
+            start_epoch += save_epoch

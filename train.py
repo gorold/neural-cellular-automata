@@ -1,5 +1,5 @@
 import argparse
-import os
+import os, time, json
 
 import torch
 import torch.optim as optim
@@ -14,7 +14,8 @@ def get_options():
     # General options
     parser.add_argument('--emoji', required=True, type=int, help='Select which emoji to train on (0-9).')
     parser.add_argument('--model_dir', default='models/', help='Where to save the trained model to?')
-    parser.add_argument('--figure_dir', default='figures/', help='Where to save any figure/images to?')
+    parser.add_argument('--fig_dir', default='figures/', help='Where to save any figure/images to?')
+    parser.add_argument('--save_epoch', default=100, type=int, help='Save figures and model every save_epoch epochs.')
 
     # NCA model options
     parser.add_argument('--channel_n', default=16, type=int, help='Number of channels to represent cell state.')
@@ -55,16 +56,28 @@ def get_options():
 
     return opt
 
+def get_model_name(model_dir, name):
+    i = 0
+    model_name = f'{name}_{i}'
+    while os.path.exists(os.path.join(model_dir, model_name + '.pth')):
+        i += 1
+        model_name = f'{name}_{i}'
+    return model_name
+
 def run():
     opt = get_options()
 
+    model_name = get_model_name(opt.model_dir, 'nca')
+    model_path = os.path.join(opt.model_dir, model_name + '.pth')
+    fig_dir = os.path.join(opt.fig_dir, model_name)
+
+    # Create model_dir and save settings into json file
+    mkdir_p(os.path.join(opt.model_dir))
+    with open(os.path.join(opt.model_dir, model_name + '.json'), 'w') as fp:
+        json.dump(opt.__dict__, fp)    
+
     target = load_emoji(opt.emoji)
-
-    # model_dir = os.path.join(opt.model_dir, )
-    # figure_dir = os.path.join(opt.figure_dir, )
-
     device = torch.device('cuda' if opt.cuda else 'cpu')
-
     nca = GrowingNCA(device, channel_n=opt.channel_n, fire_rate=opt.fire_rate, hidden_size=opt.hidden_size)
     optimizer = optim.Adam(nca.parameters(), lr=opt.lr, betas=(opt.beta1, opt.beta2))
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, opt.gamma)
@@ -79,6 +92,9 @@ def run():
         opt.pool_size, 
         opt.batch_size, 
         opt.damage_n,
+        fig_dir,
+        model_path,
+        save_epoch=opt.save_epoch,
     )
 
 if __name__ == '__main__':
