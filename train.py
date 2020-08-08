@@ -7,15 +7,18 @@ import torch.optim as optim
 from NeuralCellularAutomata import *
 from utils import *
 from trainer import *
+from dataloaders import *
 
 def get_options():
     parser = argparse.ArgumentParser()
 
     # General options
-    parser.add_argument('--emoji', required=True, type=int, help='Select which emoji to train on (0-9).')
+    parser.add_argument('--emoji', required=False, type=int, help='Select which emoji to train on (0-9).')
     parser.add_argument('--model_dir', default='models/', help='Where to save the trained model to?')
     parser.add_argument('--fig_dir', default='figures/', help='Where to save any figure/images to?')
     parser.add_argument('--save_epoch', default=100, type=int, help='Save figures and model every save_epoch epochs.')
+    parser.add_argument('--conditional', action='store_true', help='Train regular GrowingNCA or ConditionalNCA.')
+    parser.add_argument('--train_dir', default='data/train', help='Directory to images to train on, for ConditionalNCA')
 
     # NCA model options
     parser.add_argument('--channel_n', default=16, type=int, help='Number of channels to represent cell state.')
@@ -23,6 +26,8 @@ def get_options():
     parser.add_argument('--hidden_size', default=128, type=int, help='Number of output feature maps in NCA\'s update rules conv layer.')
 
     # Training procedure options
+    parser.add_argument('--steps_low', default=64, type=int, help='Number of steps (floor) to take per training step')
+    parser.add_argument('--steps_high', default=96, type=int, help='Number of steps (floor) to take per training step')
     parser.add_argument('--pool_size', default=1024, type=int, help='Number of samples for the seed SamplePool with.')
     parser.add_argument('--batch_size', default=8, type=int, help='Number of samples to train at a time.')
     parser.add_argument('--damage_n', default=3, type=int, help='Number of damaged samples per batch.')
@@ -31,11 +36,14 @@ def get_options():
 
     # Optimizer options
     parser.add_argument('--lr', default=0.001, type=float, help='Adam optimizer learning rate.')
-    parser.add_argument('--beta1', default=0.5, type=float, help='')
-    parser.add_argument('--beta2', default=0.5, type=float, help='')
-    parser.add_argument('--gamma', default=0.9999, type=float, help='')
+    parser.add_argument('--beta1', default=0.5, type=float, help='Adam optimizer beta1.')
+    parser.add_argument('--beta2', default=0.5, type=float, help='Adam optimizer beta2.')
+    parser.add_argument('--gamma', default=0.9999, type=float, help='Exponential LR scheduler gamma discount factor.')
 
     opt = parser.parse_args()
+
+    # General options asserts
+    assert bool(opt.emoji) != bool(opt.conditional) # either specify emoji to train on, or conditional
 
     # NCA model options asserts
     assert opt.channel_n > 4
@@ -43,6 +51,8 @@ def get_options():
     assert opt.hidden_size > 0
 
     # Training procedure options asserts
+    assert opt.steps_low > 0
+    assert opt.steps_low <= opt.steps_high
     assert opt.pool_size > 0
     assert opt.batch_size > 0 and opt.batch_size <= opt.pool_size
     assert opt.damage_n > 0 and opt.damage_n < opt.batch_size
@@ -74,28 +84,43 @@ def run():
     # Create model_dir and save settings into json file
     mkdir_p(os.path.join(opt.model_dir))
     with open(os.path.join(opt.model_dir, model_name + '.json'), 'w') as fp:
-        json.dump(opt.__dict__, fp)    
+        json.dump(opt.__dict__, fp)        
 
-    target = load_emoji(opt.emoji)
     device = torch.device('cuda' if opt.cuda else 'cpu')
-    nca = GrowingNCA(device, channel_n=opt.channel_n, fire_rate=opt.fire_rate, hidden_size=opt.hidden_size)
+
+    if opt.conditional:
+        target = load_emoji_dict(opt.train_dir)
+        nca = ConditionalNCA(device, channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size)
+        train_func = conditional_pool_train
+    else:
+        target = load_emoji(opt.emoji) # TODO: Change for conditional
+        nca = GrowingNCA(device, channel_n=opt.channel_n, fire_rate=opt.fire_rate, hidden_size=opt.hidden_size)
+        train_func = pool_train
+
     optimizer = optim.Adam(nca.parameters(), lr=opt.lr, betas=(opt.beta1, opt.beta2))
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, opt.gamma)
 
-    pool_train(
-        nca, 
-        target, 
-        optimizer, 
-        scheduler, 
-        opt.epochs, 
-        device, 
-        opt.pool_size, 
-        opt.batch_size, 
+    args = [
+        nca,
+        target,
+        optimizer,
+        scheduler,
+        opt.epochs,
+        device,
+        opt.steps_low,
+        opt.steps_high,
+        opt.pool_size,
+        opt.batch_size,
         opt.damage_n,
         fig_dir,
         model_path,
-        save_epoch=opt.save_epoch,
-    )
+    ]
+
+    kwargs = {
+        'save_epoch': opt.save_epoch
+    }
+
+    train_func(*args, **kwargs)
 
 if __name__ == '__main__':
     run()

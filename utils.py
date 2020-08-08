@@ -1,4 +1,4 @@
-import os, io, requests
+import os, io, requests, gc
 from errno import EEXIST
 import PIL.Image
 import numpy as np
@@ -8,9 +8,11 @@ import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 
-def load_image(url, max_size=40):
-    r = requests.get(url)
-    img = PIL.Image.open(io.BytesIO(r.content))
+def load_image(img_src, max_size=40):
+    """
+    Loads an image from img_src and returns a tensor of shape (4, h, w) in premultiplied RGBA format.
+    """
+    img = PIL.Image.open(img_src)
     img.thumbnail((max_size, max_size), PIL.Image.LANCZOS)
     img = transforms.ToTensor()(img)
     img[:3, ...] *= img[3:, ...] # premultiply RGB by Alpha
@@ -39,7 +41,18 @@ def load_emoji(emoji):
     emoji = emojis[emoji]
     code = hex(ord(emoji))[2:].lower()
     url = f'https://github.com/googlefonts/noto-emoji/raw/master/png/128/emoji_u{code}.png'
-    return load_image(url)
+    r = requests.get(url)
+    return load_image(io.BytesIO(r.content))
+
+def load_emoji_dict(path):
+    """
+    Loads a list of emojis from a given file directory as a dict of tensors.
+    Returns
+    -------
+    dict[str->tensor]
+        Dictionary of class names to tensor.
+    """
+    return {f: load_image(os.path.join(path, f)) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))}
 
 def to_rgba(x):
     """
@@ -197,3 +210,18 @@ def viz_loss(losses, save_path, start_e, end_e):
     save_path = os.path.join(save_path, f'epoch_{start_e}_{end_e}.png')
     plt.savefig(save_path)
     plt.close()
+
+class GCDebug:
+
+    def __init__(self):
+        self.count = 0
+
+    def __call__(self):
+        print(f'Debugger position: {self.count}')
+        for obj in gc.get_objects():
+            try:
+                if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                    print(type(obj), obj.size(), f'cuda: {obj.is_cuda}')
+            except:
+                pass
+        self.count += 1
