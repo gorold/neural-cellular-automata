@@ -19,6 +19,7 @@ def get_options():
     parser.add_argument('--save_epoch', default=100, type=int, help='Save figures and model every save_epoch epochs.')
     parser.add_argument('--conditional', action='store_true', help='Train regular GrowingNCA or ConditionalNCA.')
     parser.add_argument('--train_dir', default='data/train', help='Directory to images to train on, for ConditionalNCA')
+    parser.add_argument('--model_name', default='nca', help='Name your model!')
 
     # NCA model options
     parser.add_argument('--channel_n', default=16, type=int, help='Number of channels to represent cell state.')
@@ -77,7 +78,7 @@ def get_model_name(model_dir, name):
 def run():
     opt = get_options()
 
-    model_name = get_model_name(opt.model_dir, 'nca')
+    model_name = get_model_name(opt.model_dir, opt.model_name)
     model_path = os.path.join(opt.model_dir, model_name + '.pth')
     fig_dir = os.path.join(opt.fig_dir, model_name)
 
@@ -93,7 +94,7 @@ def run():
         nca = ConditionalNCA(device, channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size)
         train_func = conditional_pool_train
     else:
-        target = load_emoji(opt.emoji) # TODO: Change for conditional
+        target = load_emoji(opt.emoji)
         nca = GrowingNCA(device, channel_n=opt.channel_n, fire_rate=opt.fire_rate, hidden_size=opt.hidden_size)
         train_func = pool_train
 
