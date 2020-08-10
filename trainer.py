@@ -1,7 +1,10 @@
+from math import ceil
+
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-# from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import make_grid
 
 from utils import *
 from dataloaders import *
@@ -26,18 +29,29 @@ def rank_losses(x, target):
     loss = torch.mean(torch.pow(to_rgba(x) - target, 2), dim=[1, 2, 3]).detach().cpu()
     return torch.argsort(loss, descending=True)
 
-def train_step(nca, x, target, steps, optimizer, scheduler):
+def train_step(nca, x0, target, steps, optimizer, scheduler, split=8):
     nca.train()
-    if isinstance(nca, GrowingNCA):
-        x = nca(x, steps=steps)
-    elif isinstance(nca, ConditionalNCA):
-        x = nca(x, target, steps=steps)
-    loss = F.mse_loss(to_rgba(x), target)
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    scheduler.step()
-    return x, loss
+    xs = []
+    total_loss = 0
+    for x, t in zip(torch.split(x0, split), torch.split(target, split)):
+        if isinstance(nca, GrowingNCA):
+            x = nca(x, steps=steps)
+        elif isinstance(nca, ConditionalNCA):
+            x = nca(x, t, steps=steps)
+        
+        loss = F.mse_loss(to_rgba(x), t)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+        xs.append(x)
+        total_loss += loss.detach().cpu()
+    
+    x = torch.cat(xs, dim=0)
+    total_loss /= x0.size(0)
+
+    return x, float(loss)
 
 def pool_train(nca, target, optimizer, scheduler, epochs, device, steps_low, steps_high, pool_size, batch_size, damage_n, fig_dir, model_path, save_epoch=100):
     """
@@ -73,9 +87,9 @@ def pool_train(nca, target, optimizer, scheduler, epochs, device, steps_low, ste
         batch.replace(x=x.detach().cpu())
         batch.commit()
 
-        losses.append(float(loss.detach().cpu()))
+        losses.append(loss)
 
-        print(f'Loss (epoch {epoch}): {loss.item()}')
+        print(f'Loss (epoch {epoch}): {loss}')
         if epoch % save_epoch == 0 or epoch == epochs:
 
             # Save visualizations
@@ -100,11 +114,13 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
     damage_n: int
         Number of images to damage per class.
     """
+    writer = SummaryWriter(fig_dir)
     targets = {k: pad_target(v) for k, v in targets.items()} # do not store all targets on cuda    
     seeds = {c: make_seed((targets[c].size(1), targets[c].size(2)), pool_size, nca.channel_n) for c in targets}
     pool = ConditionalSamplePool(targets=targets, **seeds) # do not store seeds on cuda
 
     losses = list()
+    graph_model = False
 
     start_epoch = 1 # used for saving figures
     for epoch in range(1, epochs+1):
@@ -124,20 +140,27 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
 
         x0 = batch.x_tensor # already on cuda
         t = batch.targets_tensor.to(device)
+        if not graph_model:
+            writer.add_graph(nca, (torch.rand_like(x0), torch.rand_like(t)))
+            graph_model = True
         x, loss = train_step(nca, x0, t, steps, optimizer, scheduler)
 
         batch.replace(x.detach().cpu())
         batch.commit()
 
-        losses.append(float(loss.detach().cpu()))
+        losses.append(loss)
+        writer.add_scalar('training loss', losses[-1], epoch)
     
-        print(f'Loss (epoch {epoch}): {loss.item()}')
+        print(f'Loss (epoch {epoch}): {loss}')
         if epoch % save_epoch == 0 or epoch == epochs:
 
             # Save visualizations
             viz_batch(x0.detach().cpu(), x.detach().cpu(), fig_dir, start_epoch, epoch)
             viz_loss(losses, fig_dir, 1, epoch) # entire loss history
             viz_loss(losses[start_epoch-1:epoch-1], fig_dir, start_epoch, epoch) # from previous save point
+
+            writer.add_image('CA_Progress', make_grid(to_rgb(x)), global_step = epoch)
+            writer.add_image('CA_Targets', make_grid(t), global_step = epoch)
 
             # Save model
             torch.save(nca.state_dict(), model_path)
