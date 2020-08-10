@@ -257,8 +257,31 @@ class NCAVariationalAutoencoder(nn.Module):
         else:
             return mu
 
+class NCAEncodingNormal(nn.Module):
+    def __init__(self):
+        super(NCAEncodingNormal, self).__init__()
+
+        self.body = nn.Sequential(OrderedDict([
+            ('conv1', nn.Conv2d(4, 8, 7, stride=3, padding=1)),
+            ('relu1', nn.ReLU()),
+            ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=0)),
+            ('relu2', nn.ReLU()),
+            ('adaptive_mp', nn.AdaptiveMaxPool2d(4)), # 4 x 4 x 16 = 256
+            ('flatten', nn.Flatten()),
+            ('fc1', nn.Linear(256, 128)),
+            ('relu3', nn.ReLU()),
+            ('fc2', nn.Linear(128, 16)),
+        ]))
+    
+    def forward(self, x):
+        x = self.body(x)
+        x = x.view(x.size(0), -1, 1, 1)
+        x = x.expand(-1, -1, 56, 56)
+        return x
+
+
 class ConditionalNCA(nn.Module):
-    def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128, latent_dims = 2):
+    def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 2):
         super(ConditionalNCA, self).__init__()
         assert fire_rate > 0 and fire_rate <= 1
 
@@ -274,7 +297,12 @@ class ConditionalNCA(nn.Module):
         #     ('relu3', nn.ReLU()),
         #     ('fc2', nn.Linear(128, 16)),
         # ]))
-        self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims)
+        self.enable_vae = enable_vae
+
+        if enable_vae:
+            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims)
+        else:
+            self.encoder = NCAEncodingNormal()
 
         self.update_rules = nn.Sequential(OrderedDict([
             ('conv1', nn.Conv2d(channel_n*3 + 16, hidden_size, 1)), # inputs -> 3 filters * channel_n
@@ -288,6 +316,7 @@ class ConditionalNCA(nn.Module):
         self.channel_n = channel_n
         self.fire_rate = fire_rate
         self.device = device
+        
 
     def alive(self, x):
         """
@@ -414,8 +443,11 @@ class ConditionalNCA(nn.Module):
             Shape (batch, ?, 1, 1)
         """
         # return self.encoder(target).view(target.size(0), -1, 1, 1)
-        encoding, latent_mu, latent_logvar = self.encoder(target)
-        return encoding, latent_mu, latent_logvar
+        if self.enable_vae:
+            encoding, latent_mu, latent_logvar = self.encoder(target)
+            return encoding, latent_mu, latent_logvar
+        else:
+            return self.encoder(target)
 
     def forward(self, x, target, encoding=None, steps=1, fire_rate=None, angle=0.0, step_size=1.0):
         """
@@ -437,13 +469,19 @@ class ConditionalNCA(nn.Module):
             fire_rate = self.fire_rate
 
         if encoding is None:
-            encoding, latent_mu, latent_logvar = self.get_encoding(target)
+            if self.enable_vae:
+                encoding, latent_mu, latent_logvar = self.get_encoding(target)
+            else:
+                encoding = self.get_encoding(target)
 
         for step in range(steps):
             x = self.update(x, encoding, fire_rate, angle, step_size)
 
         if self.training:
-            return x, latent_mu, latent_logvar
+            if self.enable_vae:
+                return x, latent_mu, latent_logvar
+            else:
+                return x
         else:
             return x
     

@@ -29,7 +29,7 @@ def rank_losses(x, target):
     loss = torch.mean(torch.pow(to_rgba(x) - target, 2), dim=[1, 2, 3]).detach().cpu()
     return torch.argsort(loss, descending=True)
 
-def train_step(nca, x0, target, steps, optimizer, scheduler, split=8):
+def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, split=8):
     nca.train()
     xs = []
     total_loss = 0
@@ -38,9 +38,13 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, split=8):
             x = nca(x, steps=steps)
             loss = F.mse_loss(to_rgba(x), t)
         elif isinstance(nca, ConditionalNCA):
-            x, mu, logvar = nca(x, t, steps=steps)
-            loss = F.mse_loss(to_rgba(x), t)
-            loss += -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            if enable_vae:
+                x, mu, logvar = nca(x, t, steps=steps)
+                loss = F.mse_loss(to_rgba(x), t)
+                loss += -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            else:
+                x = nca(x, t, steps=steps)
+                loss = F.mse_loss(to_rgba(x), t)
         
         optimizer.zero_grad()
         loss.backward()
@@ -104,7 +108,7 @@ def pool_train(nca, target, optimizer, scheduler, epochs, device, steps_low, ste
 
             start_epoch += save_epoch
 
-def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, steps_low, steps_high, pool_size, batch_size, damage_n, fig_dir, model_path, save_epoch=100):
+def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, steps_low, steps_high, pool_size, batch_size, damage_n, fig_dir, model_path, enable_vae, save_epoch=100):
     """
     targets: dict[str->tensor]
         Dict mapping target class name to tensor of size (4, h, w).
@@ -145,7 +149,7 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
         if not graph_model:
             writer.add_graph(nca, (torch.rand_like(x0), torch.rand_like(t)))
             graph_model = True
-        x, loss = train_step(nca, x0, t, steps, optimizer, scheduler)
+        x, loss = train_step(nca, x0, t, steps, optimizer, scheduler, enable_vae)
 
         batch.replace(x.detach().cpu())
         batch.commit()

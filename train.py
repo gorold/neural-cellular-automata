@@ -34,6 +34,7 @@ def get_options():
     parser.add_argument('--damage_n', default=3, type=int, help='Number of damaged samples per batch.')
     parser.add_argument('--epochs', default=8000, type=int, help='Number of epochs to train.')
     parser.add_argument('--cuda', action='store_true', help='Enables cuda.')
+    parser.add_argument('--vae', action='store_true', help='Enables VAE.')
 
     # Optimizer options
     parser.add_argument('--lr', default=0.001, type=float, help='Adam optimizer learning rate.')
@@ -91,7 +92,7 @@ def run():
 
     if opt.conditional:
         target = load_emoji_dict(opt.train_dir)
-        nca = ConditionalNCA(device, channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size)
+        nca = ConditionalNCA(device, channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size, enable_vae=opt.vae)
         train_func = conditional_pool_train
     else:
         target = load_emoji(opt.emoji)
@@ -115,6 +116,7 @@ def run():
         opt.damage_n,
         fig_dir,
         model_path,
+        opt.vae
     ]
 
     kwargs = {
