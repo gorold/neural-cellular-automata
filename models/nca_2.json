@@ -1,0 +1,1 @@
+{"emoji": 1, "model_dir": "models/", "fig_dir": "figures/", "save_epoch": 100, "conditional": false, "train_dir": "data/train", "model_name": "nca", "channel_n": 16, "fire_rate": 0.5, "hidden_size": 128, "steps_low": 64, "steps_high": 96, "pool_size": 1024, "batch_size": 8, "damage_n": 3, "epochs": 8000, "cuda": true, "lr": 0.001, "beta1": 0.5, "beta2": 0.5, "gamma": 0.9999}
