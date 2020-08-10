@@ -36,10 +36,12 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, split=8):
     for x, t in zip(torch.split(x0, split), torch.split(target, split)):
         if isinstance(nca, GrowingNCA):
             x = nca(x, steps=steps)
+            loss = F.mse_loss(to_rgba(x), t)
         elif isinstance(nca, ConditionalNCA):
-            x = nca(x, t, steps=steps)
+            x, mu, logvar = nca(x, t, steps=steps)
+            loss = F.mse_loss(to_rgba(x), t)
+            loss += -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         
-        loss = F.mse_loss(to_rgba(x), t)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
