@@ -29,7 +29,7 @@ def rank_losses(x, target):
     loss = torch.mean(torch.pow(to_rgba(x) - target, 2), dim=[1, 2, 3]).detach().cpu()
     return torch.argsort(loss, descending=True)
 
-def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, split=8):
+def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer, epoch, split=8):
     nca.train()
     xs = []
     total_loss = 0
@@ -40,8 +40,10 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, split=8
         elif isinstance(nca, ConditionalNCA):
             if enable_vae:
                 x, mu, logvar = nca(x, t, steps=steps)
-                loss = F.mse_loss(to_rgba(x), t)
-                loss += -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+                mse_loss = F.mse_loss(to_rgba(x), t)
+                kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+                loss = (mse_loss + kld_loss)
+                
             else:
                 x = nca(x, t, steps=steps)
                 loss = F.mse_loss(to_rgba(x), t)
@@ -56,6 +58,8 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, split=8
     
     x = torch.cat(xs, dim=0)
     total_loss /= x0.size(0)
+    writer.add_scalar('MSE loss', mse_loss.detach().item(), epoch)
+    writer.add_scalar('KLD loss', kld_loss.detach().item(), epoch)
 
     return x, float(loss)
 
@@ -149,7 +153,7 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
         if not graph_model:
             writer.add_graph(nca, (torch.rand_like(x0), torch.rand_like(t)))
             graph_model = True
-        x, loss = train_step(nca, x0, t, steps, optimizer, scheduler, enable_vae)
+        x, loss = train_step(nca, x0, t, steps, optimizer, scheduler, enable_vae, writer, epoch)
 
         batch.replace(x.detach().cpu())
         batch.commit()

@@ -189,14 +189,14 @@ class NCADecoder(nn.Module):
     def __init__(self, latent_dims = 2, height = 56, width = 56, output_channel = 16):
         super(NCADecoder, self).__init__()
 
-        assert height % 4 == 0 and width % 4 == 0, 'Height and Width need to be divisible by 4'
+        # assert height % 4 == 0 and width % 4 == 0, 'Height and Width need to be divisible by 4'
 
-        self.h = height//4
-        self.w = width//4
+        # self.h = height//4
+        # self.w = width//4
 
-        self.fc1 = nn.Linear(latent_dims, out_features= 256*self.h*self.w)
-        self.conv1 = nn.ConvTranspose2d(256, 128, 4, stride=2, padding=1)
-        self.conv2 = nn.ConvTranspose2d(128, output_channel, 4, stride=2, padding=1)
+        self.fc1 = nn.Linear(latent_dims, out_features= output_channel)
+        # self.conv1 = nn.ConvTranspose2d(256, 128, 4, stride=2, padding=1)
+        # self.conv2 = nn.ConvTranspose2d(128, output_channel, 4, stride=2, padding=1)
 
     def forward(self, x):
         '''
@@ -209,9 +209,12 @@ class NCADecoder(nn.Module):
             x torch.tensor: tensor of shape [batch_size, 16, 56, 56]
         '''
         x = self.fc1(x)
-        x = x.view(x.size(0), 256, self.h, self.w)
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
+        # x = x.view(x.size(0), 256, self.h, self.w)
+        # x = F.relu(self.conv1(x))
+        # x = F.relu(self.conv2(x))
+
+        x = x.view(x.size(0), -1, 1, 1)
+        x = x.expand(-1, -1, 56, 56)
         return x
 
 class NCAVariationalAutoencoder(nn.Module):
@@ -281,7 +284,7 @@ class NCAEncodingNormal(nn.Module):
 
 
 class ConditionalNCA(nn.Module):
-    def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 2):
+    def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 5):
         super(ConditionalNCA, self).__init__()
         assert fire_rate > 0 and fire_rate <= 1
 
@@ -300,7 +303,7 @@ class ConditionalNCA(nn.Module):
         self.enable_vae = enable_vae
 
         if enable_vae:
-            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims)
+            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims, output_channel=32)
         else:
             self.encoder = NCAEncodingNormal()
 

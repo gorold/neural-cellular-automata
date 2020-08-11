@@ -18,7 +18,7 @@ def get_options():
     parser.add_argument('--fig_dir', default='figures/', help='Where to save any figure/images to?')
     parser.add_argument('--save_epoch', default=100, type=int, help='Save figures and model every save_epoch epochs.')
     parser.add_argument('--conditional', action='store_true', help='Train regular GrowingNCA or ConditionalNCA.')
-    parser.add_argument('--train_dir', default='data/train', help='Directory to images to train on, for ConditionalNCA')
+    parser.add_argument('--train_dir', default='data/train_vae', help='Directory to images to train on, for ConditionalNCA')
     parser.add_argument('--model_name', default='nca', help='Name your model!')
 
     # NCA model options
