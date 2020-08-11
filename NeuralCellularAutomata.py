@@ -210,10 +210,10 @@ class NCADecoder(nn.Module):
             x torch.tensor: tensor of shape [batch_size, 16, 56, 56]
         '''
         x = self.fc1(x)
-        x_recon = x.view(x.size(0), 128, self.h, self.w)
-        x_recon = F.relu(self.fc2(x_recon))
+        x_recon = F.relu(self.fc2(x))
+        x_recon = x_recon.view(x_recon.size(0), 128, self.h, self.w)
         x_recon = F.relu(self.conv1(x_recon))
-        x_recon = F.relu(self.conv2(x_recon))
+        x_recon = torch.sigmoid(self.conv2(x_recon))
 
         x = x.view(x.size(0), -1, 1, 1)
         x = x.expand(-1, -1, self.h*4, self.w*4)

@@ -42,7 +42,8 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
             if enable_vae:
                 x, x_recon, mu, logvar = nca(x, t, steps=steps)
                 mse_loss = F.mse_loss(to_rgba(x), t)
-                vae_mse_loss = F.mse_loss(x_recon, t)
+                dims = t.size(1) * t.size(2) *t.size(3)
+                vae_mse_loss = F.binary_cross_entropy(x_recon.view(-1, dims), t.view(-1, dims))
                 kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                 loss = (mse_loss + kld_loss + vae_mse_loss)
                 
@@ -56,7 +57,7 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
         scheduler.step()
 
         xs.append(x)
-        if enable vae:
+        if enable_vae:
             x_recons.append(x_recon)
         total_loss += loss.detach().cpu()
     
@@ -69,7 +70,7 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
     writer.add_scalar('VAE MSE loss', vae_mse_loss.detach().item(), epoch)
     writer.add_scalar('KLD loss', kld_loss.detach().item(), epoch)
 
-    return x, float(loss), x_recon
+    return x, float(loss)
 
 def pool_train(nca, target, optimizer, scheduler, epochs, device, steps_low, steps_high, pool_size, batch_size, damage_n, fig_dir, model_path, save_epoch=100):
     """
