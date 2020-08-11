@@ -42,8 +42,8 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
             if enable_vae:
                 x, x_recon, mu, logvar = nca(x, t, steps=steps)
                 mse_loss = F.mse_loss(to_rgba(x), t)
-                dims = t.size(1) * t.size(2) *t.size(3)
-                vae_mse_loss = F.binary_cross_entropy(x_recon.view(-1, dims), t.view(-1, dims))
+                # dims = t.size(1) * t.size(2) *t.size(3)
+                vae_mse_loss = F.mse_loss(x_recon, t) #F.binary_cross_entropy(x_recon.view(-1, dims), t.view(-1, dims))
                 kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                 loss = (mse_loss + kld_loss + vae_mse_loss)
                 
