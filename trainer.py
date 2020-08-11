@@ -32,6 +32,7 @@ def rank_losses(x, target):
 def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer, epoch, split=8):
     nca.train()
     xs = []
+    x_recons = []
     total_loss = 0
     for x, t in zip(torch.split(x0, split), torch.split(target, split)):
         if isinstance(nca, GrowingNCA):
@@ -55,15 +56,20 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
         scheduler.step()
 
         xs.append(x)
+        if enable vae:
+            x_recons.append(x_recon)
         total_loss += loss.detach().cpu()
     
     x = torch.cat(xs, dim=0)
+    x_recon = torch.cat(x_recons, dim=0)
+    if epoch % 5 == 0:
+        writer.add_image('VAE_Progress', make_grid(x_recon), global_step = epoch)
     total_loss /= x0.size(0)
     writer.add_scalar('MSE loss', mse_loss.detach().item(), epoch)
     writer.add_scalar('VAE MSE loss', vae_mse_loss.detach().item(), epoch)
     writer.add_scalar('KLD loss', kld_loss.detach().item(), epoch)
 
-    return x, float(loss)
+    return x, float(loss), x_recon
 
 def pool_train(nca, target, optimizer, scheduler, epochs, device, steps_low, steps_high, pool_size, batch_size, damage_n, fig_dir, model_path, save_epoch=100):
     """

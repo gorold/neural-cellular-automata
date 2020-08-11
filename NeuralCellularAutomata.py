@@ -195,7 +195,7 @@ class NCADecoder(nn.Module):
         self.w = width//4
 
         self.fc1 = nn.Linear(latent_dims, out_features = output_channel)
-        self.fc2 = nn.Linear(output_channel, out_features = 128)
+        self.fc2 = nn.Linear(output_channel, out_features = 128*self.h*self.w)
         self.conv1 = nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1)
         self.conv2 = nn.ConvTranspose2d(64, 4, 4, stride=2, padding=1)
 
@@ -216,7 +216,7 @@ class NCADecoder(nn.Module):
         x_recon = F.relu(self.conv2(x_recon))
 
         x = x.view(x.size(0), -1, 1, 1)
-        x = x.expand(-1, -1, self.h, self.w)
+        x = x.expand(-1, -1, self.h*4, self.w*4)
         return x, x_recon
 
 class NCAVariationalAutoencoder(nn.Module):
