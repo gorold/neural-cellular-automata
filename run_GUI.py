@@ -38,7 +38,15 @@ class GUI(tk.Frame):
         self.modelType.set("conditional")
 
         self.conditional_target = {k: pad_target(v) for k, v in load_emoji_dict('data/train').items()}
-            
+        self.conditional_target_names = {'Shower head' : 'emoji_u1f6bf.png', 
+                                         'Ok sign': 'emoji_u1f44c.png', 
+                                         'Soldier' : 'emoji_u1f482_200d_2642.png', 
+                                         'Frying Pan':'emoji_u1f373.png', 
+                                         'Eggplant' : 'emoji_u1f346.png', 
+                                         'Curse Word': 'emoji_u1f92c.png', 
+                                         'A little bit' : 'emoji_u1f90f_1f3fb.png', 
+                                         'Shocked Face' : 'emoji_u1f62f.png'}
+    
         self.modelTarget = tk.StringVar()
         self.modelTarget.set("Select Model Target")
         
@@ -94,12 +102,13 @@ class GUI(tk.Frame):
     def change_conditional(self):
         # Changes the dropdown box options to show the relevant options
         self.modelTarget.set("Select Model Target")
-        self.select_model_target['values'] = list(self.conditional_target.keys())
+        
+        self.select_model_target['values'] = list(self.conditional_target_names.keys())
 
     def change_normal(self):
         # Changes the dropdown box options to show the relevant options
         self.modelTarget.set("Select Model Target")
-        self.select_model_target['values'] = ['0', '2', '3']   
+        self.select_model_target['values'] = ['Smiley Face', 'Lizard', 'Explosion']
 
     def onScale(self, val):
         # Set speed of scale
@@ -113,7 +122,7 @@ class GUI(tk.Frame):
         self.nca.model.eval()
         with torch.no_grad():
             if self.current_modelType == 'conditional':
-                self.nca.x = self.nca.model(self.nca.x, None, self.conditional_encoding[self.current_modelTarget])
+                self.nca.x = self.nca.model(self.nca.x, None, self.conditional_encoding[self.conditional_target_names[self.current_modelTarget]])
                 out = np.transpose(to_rgb(self.nca.x).detach().cpu().numpy()[0], (1, 2, 0))
             else:
                 self.nca.x = self.nca.model(self.nca.x)
@@ -155,7 +164,8 @@ class GUI(tk.Frame):
                 for k, v in self.conditional_target.items():
                     self.conditional_encoding[k] = self.nca.model.get_encoding(v.unsqueeze(0).to(device))
             else:
-                self.nca = Model(target = model_target)
+                normal_model_target = {'Smiley Face': '2', 'Lizard' : '0', 'Explosion' : '3'}
+                self.nca = Model(target = normal_model_target[model_target])
 
             self.refresh_button['state'] = tk.NORMAL
             self.canvas.callbacks.connect('button_press_event', self.on_click)
