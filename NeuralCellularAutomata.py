@@ -189,14 +189,15 @@ class NCADecoder(nn.Module):
     def __init__(self, latent_dims = 2, height = 56, width = 56, output_channel = 16):
         super(NCADecoder, self).__init__()
 
-        # assert height % 4 == 0 and width % 4 == 0, 'Height and Width need to be divisible by 4'
+        assert height % 4 == 0 and width % 4 == 0, 'Height and Width need to be divisible by 4'
 
-        # self.h = height//4
-        # self.w = width//4
+        self.h = height//4
+        self.w = width//4
 
-        self.fc1 = nn.Linear(latent_dims, out_features= output_channel)
-        # self.conv1 = nn.ConvTranspose2d(256, 128, 4, stride=2, padding=1)
-        # self.conv2 = nn.ConvTranspose2d(128, output_channel, 4, stride=2, padding=1)
+        self.fc1 = nn.Linear(latent_dims, out_features = output_channel)
+        self.fc2 = nn.Linear(output_channel, out_features = 128)
+        self.conv1 = nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1)
+        self.conv2 = nn.ConvTranspose2d(64, 4, 4, stride=2, padding=1)
 
     def forward(self, x):
         '''
@@ -209,13 +210,14 @@ class NCADecoder(nn.Module):
             x torch.tensor: tensor of shape [batch_size, 16, 56, 56]
         '''
         x = self.fc1(x)
-        # x = x.view(x.size(0), 256, self.h, self.w)
-        # x = F.relu(self.conv1(x))
-        # x = F.relu(self.conv2(x))
+        x_recon = x.view(x.size(0), 128, self.h, self.w)
+        x_recon = F.relu(self.fc2(x_recon))
+        x_recon = F.relu(self.conv1(x_recon))
+        x_recon = F.relu(self.conv2(x_recon))
 
         x = x.view(x.size(0), -1, 1, 1)
-        x = x.expand(-1, -1, 56, 56)
-        return x
+        x = x.expand(-1, -1, self.h, self.w)
+        return x, x_recon
 
 class NCAVariationalAutoencoder(nn.Module):
     def __init__(self, latent_dims = 2, output_width = 56, output_height = 56, output_channel = 16):
@@ -237,8 +239,8 @@ class NCAVariationalAutoencoder(nn.Module):
         '''
         latent_mu, latent_logvar = self.encoder(x)
         latent = self.latent_sample(latent_mu, latent_logvar)
-        x_recon = self.decoder(latent)
-        return x_recon, latent_mu, latent_logvar
+        encoding, x_recon = self.decoder(latent)
+        return encoding, x_recon, latent_mu, latent_logvar
     
     def latent_sample(self, mu, logvar):
         '''
@@ -284,7 +286,7 @@ class NCAEncodingNormal(nn.Module):
 
 
 class ConditionalNCA(nn.Module):
-    def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 5):
+    def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 5, vae_output_channel = 16):
         super(ConditionalNCA, self).__init__()
         assert fire_rate > 0 and fire_rate <= 1
 
@@ -303,12 +305,12 @@ class ConditionalNCA(nn.Module):
         self.enable_vae = enable_vae
 
         if enable_vae:
-            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims, output_channel=32)
+            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims, output_channel=vae_output_channel)
         else:
             self.encoder = NCAEncodingNormal()
 
         self.update_rules = nn.Sequential(OrderedDict([
-            ('conv1', nn.Conv2d(channel_n*3 + 16, hidden_size, 1)), # inputs -> 3 filters * channel_n
+            ('conv1', nn.Conv2d(channel_n*3 + vae_output_channel, hidden_size, 1)), # inputs -> 3 filters * channel_n
             ('relu', nn.ReLU()),
             ('conv2', nn.Conv2d(hidden_size, channel_n, 1)), # outputs -> channel_n (interpreted as update rules)
         ]))
@@ -447,8 +449,8 @@ class ConditionalNCA(nn.Module):
         """
         # return self.encoder(target).view(target.size(0), -1, 1, 1)
         if self.enable_vae:
-            encoding, latent_mu, latent_logvar = self.encoder(target)
-            return encoding, latent_mu, latent_logvar
+            encoding, x_recon, latent_mu, latent_logvar = self.encoder(target)
+            return encoding, x_recon, latent_mu, latent_logvar
         else:
             return self.encoder(target)
 
@@ -473,7 +475,7 @@ class ConditionalNCA(nn.Module):
 
         if encoding is None:
             if self.enable_vae:
-                encoding, latent_mu, latent_logvar = self.get_encoding(target)
+                encoding, x_recon, latent_mu, latent_logvar = self.get_encoding(target)
             else:
                 encoding = self.get_encoding(target)
 
@@ -482,7 +484,7 @@ class ConditionalNCA(nn.Module):
 
         if self.training:
             if self.enable_vae:
-                return x, latent_mu, latent_logvar
+                return x, x_recon, latent_mu, latent_logvar
             else:
                 return x
         else:

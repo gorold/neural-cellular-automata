@@ -39,10 +39,11 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
             loss = F.mse_loss(to_rgba(x), t)
         elif isinstance(nca, ConditionalNCA):
             if enable_vae:
-                x, mu, logvar = nca(x, t, steps=steps)
+                x, x_recon, mu, logvar = nca(x, t, steps=steps)
                 mse_loss = F.mse_loss(to_rgba(x), t)
+                vae_mse_loss = F.mse_loss(x_recon, t)
                 kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-                loss = (mse_loss + kld_loss)
+                loss = (mse_loss + kld_loss + vae_mse_loss)
                 
             else:
                 x = nca(x, t, steps=steps)
@@ -59,6 +60,7 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
     x = torch.cat(xs, dim=0)
     total_loss /= x0.size(0)
     writer.add_scalar('MSE loss', mse_loss.detach().item(), epoch)
+    writer.add_scalar('VAE MSE loss', vae_mse_loss.detach().item(), epoch)
     writer.add_scalar('KLD loss', kld_loss.detach().item(), epoch)
 
     return x, float(loss)
