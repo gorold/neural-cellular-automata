@@ -82,7 +82,7 @@ class GUI(tk.Frame):
         self.quit_button.grid(row=7, column= 1)
 
         # Plot initial README canvas and set up options
-        self.fig = plt.figure(figsize=(5, 5), dpi=150)
+        self.fig = plt.figure(figsize=(5, 5), dpi=100)
         self.fig.add_subplot(111)
         image = Image.open(f'{os.getcwd()}/assets/readme.png').convert('RGB') # Replace with instructions
         plt.imshow(image)
@@ -207,7 +207,7 @@ def on_closing():
 if __name__ == "__main__":
     root = tk.Tk()
     GUI(root)
-    root.geometry("700x950")
+    root.geometry("500x700")
     root.wm_title("Neural Cellular Automata")
     root.iconbitmap(f"{os.getcwd()}/assets/emoji_u1f44c.ico")
     root.resizable(width=False, height=False)
