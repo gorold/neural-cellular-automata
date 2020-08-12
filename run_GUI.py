@@ -131,7 +131,7 @@ class GUI(tk.Frame):
         plt.axis('off')
         self.canvas.draw()
         self.canvas.get_tk_widget().grid(row=6, columnspan=3)
-        self.after(int(100/self.interval_speed.get()), self.update_plot) # how often you want to refresh
+        self.after(int(1000/self.interval_speed.get()), self.update_plot) # how often you want to refresh
 
     def generate_model(self):
         # Function called when "generate" button is pressed
