@@ -186,7 +186,7 @@ class NCAEncoder(nn.Module):
         return x_mu, x_logvar
 
 class NCADecoder(nn.Module):
-    def __init__(self, num_emojis, latent_dims = 2, height = 56, width = 56, output_channel = 16):
+    def __init__(self, latent_dims = 2, height = 56, width = 56, output_channel = 16):
         super(NCADecoder, self).__init__()
 
         assert height % 4 == 0 and width % 4 == 0, 'Height and Width need to be divisible by 4'
@@ -196,7 +196,6 @@ class NCADecoder(nn.Module):
 
         self.fc1 = nn.Linear(latent_dims, out_features = output_channel)
         self.fc2 = nn.Linear(output_channel, out_features = 128*self.h*self.w)
-        self.fc_label = nn.Linear(in_features = 128*self.h*self.w, out_features = 2)
         self.conv1 = nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1)
         self.conv2 = nn.ConvTranspose2d(64, 4, 4, stride=2, padding=1)
 
@@ -212,20 +211,19 @@ class NCADecoder(nn.Module):
         '''
         x = self.fc1(x)
         x_recon = F.relu(self.fc2(x))
-        c_pred = self.fc_label(x_recon)
         x_recon = x_recon.view(x_recon.size(0), 128, self.h, self.w)
         x_recon = F.relu(self.conv1(x_recon))
         x_recon = torch.sigmoid(self.conv2(x_recon))
 
         x = x.view(x.size(0), -1, 1, 1)
         x = x.expand(-1, -1, self.h*4, self.w*4)
-        return x, x_recon, c_pred
+        return x, x_recon
 
 class NCAVariationalAutoencoder(nn.Module):
-    def __init__(self, num_emojis, latent_dims = 2, output_width = 56, output_height = 56, output_channel = 16):
+    def __init__(self, latent_dims = 2, output_width = 56, output_height = 56, output_channel = 16):
         super(NCAVariationalAutoencoder, self).__init__()
         self.encoder = NCAEncoder(latent_dims = latent_dims)
-        self.decoder = NCADecoder(num_emojis, latent_dims = latent_dims, height = output_height, width = output_width, output_channel = output_channel)
+        self.decoder = NCADecoder(latent_dims = latent_dims, height = output_height, width = output_width, output_channel = output_channel)
     
     def forward(self, x):
         '''
@@ -241,8 +239,8 @@ class NCAVariationalAutoencoder(nn.Module):
         '''
         latent_mu, latent_logvar = self.encoder(x)
         latent = self.latent_sample(latent_mu, latent_logvar)
-        encoding, x_recon, c_pred = self.decoder(latent)
-        return encoding, x_recon, c_pred, latent_mu, latent_logvar
+        encoding, x_recon = self.decoder(latent)
+        return encoding, x_recon, latent_mu, latent_logvar
     
     def latent_sample(self, mu, logvar):
         '''
@@ -307,7 +305,7 @@ class ConditionalNCA(nn.Module):
         self.enable_vae = enable_vae
 
         if enable_vae:
-            self.encoder = NCAVariationalAutoencoder(num_emojis = num_emojis, latent_dims = latent_dims, output_channel=vae_output_channel)
+            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims, output_channel=vae_output_channel)
         else:
             self.encoder = NCAEncodingNormal()
 
@@ -451,8 +449,8 @@ class ConditionalNCA(nn.Module):
         """
         # return self.encoder(target).view(target.size(0), -1, 1, 1)
         if self.enable_vae:
-            encoding, x_recon, c_pred, latent_mu, latent_logvar = self.encoder(target)
-            return encoding, x_recon, c_pred, latent_mu, latent_logvar
+            encoding, x_recon, latent_mu, latent_logvar = self.encoder(target)
+            return encoding, x_recon, latent_mu, latent_logvar
         else:
             return self.encoder(target)
 
@@ -477,7 +475,7 @@ class ConditionalNCA(nn.Module):
 
         if encoding is None:
             if self.enable_vae:
-                encoding, x_recon, c_pred, latent_mu, latent_logvar = self.get_encoding(target)
+                encoding, x_recon, latent_mu, latent_logvar = self.get_encoding(target)
             else:
                 encoding = self.get_encoding(target)
 
@@ -486,7 +484,7 @@ class ConditionalNCA(nn.Module):
 
         if self.training:
             if self.enable_vae:
-                return x, x_recon, c_pred, latent_mu, latent_logvar
+                return x, x_recon, latent_mu, latent_logvar
             else:
                 return x
         else:
