@@ -92,7 +92,7 @@ def run():
 
     if opt.conditional:
         target = load_emoji_dict(opt.train_dir)
-        nca = ConditionalNCA(device, channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size, enable_vae=opt.vae)
+        nca = ConditionalNCA(device, len(target.keys()), channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size, enable_vae=opt.vae)
         train_func = conditional_pool_train
     else:
         target = load_emoji(opt.emoji)

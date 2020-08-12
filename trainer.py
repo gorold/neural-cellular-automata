@@ -29,23 +29,24 @@ def rank_losses(x, target):
     loss = torch.mean(torch.pow(to_rgba(x) - target, 2), dim=[1, 2, 3]).detach().cpu()
     return torch.argsort(loss, descending=True)
 
-def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer, epoch, split=8):
+def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer, epoch, t_oh, split=8):
     nca.train()
     xs = []
     x_recons = []
     total_loss = 0
-    for x, t in zip(torch.split(x0, split), torch.split(target, split)):
+    for x, t, t_o in zip(torch.split(x0, split), torch.split(target, split), torch.split(t_oh, split)):
         if isinstance(nca, GrowingNCA):
             x = nca(x, steps=steps)
             loss = F.mse_loss(to_rgba(x), t)
         elif isinstance(nca, ConditionalNCA):
             if enable_vae:
-                x, x_recon, mu, logvar = nca(x, t, steps=steps)
+                x, x_recon, c_pred, mu, logvar = nca(x, t, steps=steps)
                 mse_loss = F.mse_loss(to_rgba(x), t)
                 # dims = t.size(1) * t.size(2) *t.size(3)
-                vae_mse_loss = F.mse_loss(x_recon, t) #F.binary_cross_entropy(x_recon.view(-1, dims), t.view(-1, dims))
+                vae_mse_loss = F.mse_loss(x_recon, t) #F.binary_cross_entropy(x_recon.view(-1, dims), t.view(-1, dims))\
+                vae_ce_loss = F.cross_entropy(c_pred, t_o)
                 kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-                loss = (mse_loss + kld_loss + vae_mse_loss)
+                loss = (mse_loss + kld_loss + vae_mse_loss + vae_ce_loss)
                 
             else:
                 x = nca(x, t, steps=steps)
@@ -68,6 +69,7 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
     total_loss /= x0.size(0)
     writer.add_scalar('MSE loss', mse_loss.detach().item(), epoch)
     writer.add_scalar('VAE MSE loss', vae_mse_loss.detach().item(), epoch)
+    writer.add_scalar('VAE CE loss', vae_ce_loss.detach().item(), epoch)
     writer.add_scalar('KLD loss', kld_loss.detach().item(), epoch)
 
     return x, float(loss)
@@ -136,7 +138,8 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
     writer = SummaryWriter(fig_dir)
     targets = {k: pad_target(v) for k, v in targets.items()} # do not store all targets on cuda    
     seeds = {c: make_seed((targets[c].size(1), targets[c].size(2)), pool_size, nca.channel_n) for c in targets}
-    pool = ConditionalSamplePool(targets=targets, **seeds) # do not store seeds on cuda
+    targets_oh = {k:torch.tensor(i) for i, (k, v) in enumerate(targets.items())}
+    pool = ConditionalSamplePool(targets=targets,  targets_oh = targets_oh, **seeds) # do not store seeds on cuda
 
     losses = list()
     graph_model = False
@@ -159,10 +162,11 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
 
         x0 = batch.x_tensor # already on cuda
         t = batch.targets_tensor.to(device)
+        t_oh = batch.targets_oh_tensor.to(device)
         if not graph_model:
             writer.add_graph(nca, (torch.rand_like(x0), torch.rand_like(t)))
             graph_model = True
-        x, loss = train_step(nca, x0, t, steps, optimizer, scheduler, enable_vae, writer, epoch)
+        x, loss = train_step(nca, x0, t, steps, optimizer, scheduler, enable_vae, writer, epoch, t_oh)
 
         batch.replace(x.detach().cpu())
         batch.commit()

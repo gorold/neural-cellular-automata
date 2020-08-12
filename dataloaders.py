@@ -56,8 +56,9 @@ class ConditionalSamplePool:
     """
 
     t_container = None
+    t_container_oh = None
 
-    def __init__(self, *, targets=None, _parent=None, _parent_idx=None, **slots):
+    def __init__(self, *, targets=None, targets_oh = None, _parent=None, _parent_idx=None, **slots):
         """
         targets: dict[str->tensor]
             Maps a target class name to the tensor representing the target image of shape (4, h, w).
@@ -77,6 +78,7 @@ class ConditionalSamplePool:
             assert targets is not None
             assert all([class_name in targets.keys() for class_name in self._slot_names])
             ConditionalSamplePool.t_container = targets
+            ConditionalSamplePool.t_container_oh = targets_oh
 
     def sample(self, n):
         """
@@ -119,3 +121,12 @@ class ConditionalSamplePool:
         if self._parent is None:
             raise TypeError("Should not obtain Parent SamplePool's targets.")
         return torch.cat([ConditionalSamplePool.t_container[k].unsqueeze(0).repeat(self._size, 1, 1, 1) for k in self._slot_names], dim=0)
+
+    @property
+    def targets_oh_tensor(self):
+        """
+        Returns the targets one hot tensor of a sample in full tensor form of shape (num_emojis*batch_size, num_emojis)
+        """
+        if self._parent is None:
+            raise TypeError("Should not obtain Parent SamplePool's targets.")
+        return torch.cat([ConditionalSamplePool.t_container_oh[k].unsqueeze(0).repeat(self._size) for k in self._slot_names], dim=0).type(torch.long)
