@@ -55,7 +55,7 @@ class GUI(tk.Frame):
 
         self.scale_labels = {}
         for i in range(1,6):
-            self.scale_labels[i] = f"Speed: {i}x ({i * 2} iterations/s)" 
+            self.scale_labels[i] = f"Speed: {i}x ({i} iterations/s)" 
         
         # Add widgets
 
