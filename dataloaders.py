@@ -33,10 +33,10 @@ from albumentations import (
 def get_augmentations(img_size):
     height, width = img_size
     list_transforms = []
-    list_transforms.append(HorizontalFlip())
-    list_transforms.append(VerticalFlip())
+    # list_transforms.append(HorizontalFlip())
+    # list_transforms.append(VerticalFlip())
     list_transforms.append(
-        ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.05, rotate_limit=360, p=1),
+        ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.05, rotate_limit=0, p=1),
     )
     list_transforms.append(
         OneOf([

@@ -179,6 +179,7 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
             viz_loss(losses[start_epoch-1:epoch-1], fig_dir, start_epoch, epoch) # from previous save point
 
             writer.add_image('CA_Progress', make_grid(to_rgb(x)), global_step = epoch)
+            writer.add_image('VAE_Targets', make_grid(t_aug), global_step = epoch)
             writer.add_image('CA_Targets', make_grid(t), global_step = epoch)
 
             # Save model

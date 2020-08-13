@@ -158,16 +158,33 @@ class NCAEncoder(nn.Module):
     def __init__(self, latent_dims = 2):
         super(NCAEncoder, self).__init__()
         self.body = nn.Sequential(OrderedDict([
-            ('conv1', nn.Conv2d(4, 8, 7, stride=3, padding=1)),
-            ('relu1', nn.ReLU()),
-            ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=0)),
-            ('relu2', nn.ReLU()),
-            ('adaptive_mp', nn.AdaptiveMaxPool2d(4)), # 4 x 4 x 16 = 256
-            ('flatten', nn.Flatten()),
+            ('conv1', nn.Conv2d(4, 8, 3, stride=1, padding=1)),
+            ('norm1', nn.BatchNorm2d(8)),
+            ('relu1', nn.LeakyReLU()),
+            ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=1)),
+            ('norm2', nn.BatchNorm2d(16)),
+            ('relu2', nn.LeakyReLU()),
+            ('conv3', nn.Conv2d(16, 32, 3, stride=1, padding=1)),
+            ('norm3', nn.BatchNorm2d(32)),
+            ('relu3', nn.LeakyReLU()),
+            ('conv4', nn.Conv2d(32, 64, 3, stride=1, padding=1)),
+            ('norm4', nn.BatchNorm2d(64)),
+            ('relu4', nn.LeakyReLU()),
+            ('adaptive_mp', nn.AdaptiveMaxPool2d(2)), # 2 x 2 x 64 = 1024
+            ('flatten', nn.Flatten())
         ]))
 
-        self.fc_mu = nn.Linear(in_features = 256, out_features = latent_dims)
-        self.fc_logvar = nn.Linear(in_features = 256, out_features = latent_dims)
+        self.fc_mu = nn.Sequential(OrderedDict([
+            ('lin1',nn.Linear(in_features = 256, out_features = 128)),
+            ('relu1',nn.LeakyReLU()),
+            ('lin2',nn.Linear(in_features = 128, out_features = latent_dims))
+        ]))
+        
+        self.fc_logvar = nn.Sequential(OrderedDict([
+            ('lin1',nn.Linear(in_features = 256, out_features = 128)),
+            ('relu1',nn.LeakyReLU()),
+            ('lin2',nn.Linear(in_features = 128, out_features = latent_dims))
+        ]))
             
     def forward(self, x):
         '''
@@ -196,8 +213,14 @@ class NCADecoder(nn.Module):
 
         self.fc1 = nn.Linear(latent_dims, out_features = output_channel)
         self.fc2 = nn.Linear(output_channel, out_features = 128*self.h*self.w)
-        self.conv1 = nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1)
-        self.conv2 = nn.ConvTranspose2d(64, 4, 4, stride=2, padding=1)
+        self.body = nn.Sequential(OrderedDict([
+            ('conv1', nn.ConvTranspose2d(128, 32, 4, stride=2, padding=1)),
+            ('norm1', nn.BatchNorm2d(32)),
+            ('relu1', nn.LeakyReLU()),
+            ('conv2', nn.ConvTranspose2d(32, 4, 4, stride=2, padding=1)),
+            ('norm2', nn.BatchNorm2d(4)),
+            ('relu2', nn.LeakyReLU()),
+        ]))
 
     def forward(self, x):
         '''
@@ -212,8 +235,7 @@ class NCADecoder(nn.Module):
         x = self.fc1(x)
         x_recon = F.relu(self.fc2(x))
         x_recon = x_recon.view(x_recon.size(0), 128, self.h, self.w)
-        x_recon = F.relu(self.conv1(x_recon))
-        x_recon = torch.sigmoid(self.conv2(x_recon))
+        x_recon = torch.sigmoid(self.body(x_recon))
 
         x = x.view(x.size(0), -1, 1, 1)
         x = x.expand(-1, -1, self.h*4, self.w*4)
