@@ -183,6 +183,6 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
             writer.add_image('CA_Targets', make_grid(t), global_step = epoch)
 
             # Save model
-            torch.save(nca, model_path)
+            torch.save(nca.state_dict(), model_path)
 
             start_epoch += save_epoch

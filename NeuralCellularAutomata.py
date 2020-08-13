@@ -284,55 +284,53 @@ class NCAVariationalAutoencoder(nn.Module):
         else:
             return mu
 
-class NCAEncodingNormal(nn.Module):
-    def __init__(self):
-        super(NCAEncodingNormal, self).__init__()
+# class NCAEncodingNormal(nn.Module):
+#     def __init__(self):
+#         super(NCAEncodingNormal, self).__init__()
 
-        self.body = nn.Sequential(OrderedDict([
-            ('conv1', nn.Conv2d(4, 8, 7, stride=3, padding=1)),
-            ('relu1', nn.ReLU()),
-            ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=0)),
-            ('relu2', nn.ReLU()),
-            ('adaptive_mp', nn.AdaptiveMaxPool2d(4)), # 4 x 4 x 16 = 256
-            ('flatten', nn.Flatten()),
-            ('fc1', nn.Linear(256, 128)),
-            ('relu3', nn.ReLU()),
-            ('fc2', nn.Linear(128, 16)),
-        ]))
+#         self.body = nn.Sequential(OrderedDict([
+#             ('conv1', nn.Conv2d(4, 8, 7, stride=3, padding=1)),
+#             ('relu1', nn.ReLU()),
+#             ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=0)),
+#             ('relu2', nn.ReLU()),
+#             ('adaptive_mp', nn.AdaptiveMaxPool2d(4)), # 4 x 4 x 16 = 256
+#             ('flatten', nn.Flatten()),
+#             ('fc1', nn.Linear(256, 128)),
+#             ('relu3', nn.ReLU()),
+#             ('fc2', nn.Linear(128, 16)),
+#         ]))
     
-    def forward(self, x):
-        x = self.body(x)
-        x = x.view(x.size(0), -1, 1, 1)
-        x = x.expand(-1, -1, 56, 56)
-        return x
+#     def forward(self, x):
+#         x = self.body(x)
+#         x = x.view(x.size(0), -1, 1, 1)
+#         x = x.expand(-1, -1, 56, 56)
+#         return x
 
 
 class ConditionalNCA(nn.Module):
-    def __init__(self, device, num_emojis, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 5, vae_output_channel = 16):
+    def __init__(self, device, num_emojis, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 5, output_channel = 16):
         super(ConditionalNCA, self).__init__()
         assert fire_rate > 0 and fire_rate <= 1
 
-        # Modify the encoder to more of a VAE kind of architecture
-        # self.encoder = nn.Sequential(OrderedDict([
-        #     ('conv1', nn.Conv2d(4, 8, 7, stride=3, padding=1)),
-        #     ('relu1', nn.ReLU()),
-        #     ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=0)),
-        #     ('relu2', nn.ReLU()),
-        #     ('adaptive_mp', nn.AdaptiveMaxPool2d(4)), # 4 x 4 x 16 = 256
-        #     ('flatten', nn.Flatten()),
-        #     ('fc1', nn.Linear(256, 128)),
-        #     ('relu3', nn.ReLU()),
-        #     ('fc2', nn.Linear(128, 16)),
-        # ]))
         self.enable_vae = enable_vae
 
         if enable_vae:
-            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims, output_channel=vae_output_channel)
+            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims, output_channel=output_channel)
         else:
-            self.encoder = NCAEncodingNormal()
+            self.encoder = nn.Sequential(OrderedDict([
+                ('conv1', nn.Conv2d(4, 8, 7, stride=3, padding=1)),
+                ('relu1', nn.ReLU()),
+                ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=0)),
+                ('relu2', nn.ReLU()),
+                ('adaptive_mp', nn.AdaptiveMaxPool2d(4)), # 4 x 4 x 16 = 256
+                ('flatten', nn.Flatten()),
+                ('fc1', nn.Linear(256, 128)),
+                ('relu3', nn.ReLU()),
+                ('fc2', nn.Linear(128, output_channel)),
+            ]))
 
         self.update_rules = nn.Sequential(OrderedDict([
-            ('conv1', nn.Conv2d(channel_n*3 + vae_output_channel, hidden_size, 1)), # inputs -> 3 filters * channel_n
+            ('conv1', nn.Conv2d(channel_n*3 + output_channel, hidden_size, 1)), # inputs -> 3 filters * channel_n
             ('relu', nn.ReLU()),
             ('conv2', nn.Conv2d(hidden_size, channel_n, 1)), # outputs -> channel_n (interpreted as update rules)
         ]))
@@ -474,7 +472,10 @@ class ConditionalNCA(nn.Module):
             encoding, x_recon, latent_mu, latent_logvar = self.encoder(target)
             return encoding, x_recon, latent_mu, latent_logvar
         else:
-            return self.encoder(target)
+            encoding = self.encoder(target)
+            encoding = encoding.view(x.size(0), -1, 1, 1)
+            encoding = encoding.expand(-1, -1, 56, 56)
+            return encoding
 
     def forward(self, x, target, encoding=None, steps=1, fire_rate=None, angle=0.0, step_size=1.0):
         """
@@ -512,3 +513,12 @@ class ConditionalNCA(nn.Module):
         else:
             return x
     
+    def interpolate(self, x, z, steps = 1):
+        assert self.enable_vae, 'Interpolation only available in VAE mode'
+
+        encoding, x_record = self.encoder.decoder(z)
+
+        for step in range(steps):
+            x = self.update(x, encoding, self.fire_rate, angle=0.0, step_size = 1.0)
+
+        return x, x_record

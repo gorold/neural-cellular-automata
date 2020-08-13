@@ -42,6 +42,9 @@ def get_options():
     parser.add_argument('--beta2', default=0.5, type=float, help='Adam optimizer beta2.')
     parser.add_argument('--gamma', default=0.9999, type=float, help='Exponential LR scheduler gamma discount factor.')
 
+    # VAE options
+    parser.add_argument('--latent_dims', default=5, type=int, help='Dimension of latent vector in VAE')
+
     opt = parser.parse_args()
 
     # General options asserts
@@ -92,7 +95,7 @@ def run():
 
     if opt.conditional:
         target = load_emoji_dict(opt.train_dir)
-        nca = ConditionalNCA(device, len(target.keys()), channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size, enable_vae=opt.vae)
+        nca = ConditionalNCA(device, len(target.keys()), channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size, enable_vae=opt.vae, latent_dims=opt.latent_dims)
         train_func = conditional_pool_train
     else:
         target = load_emoji(opt.emoji)
