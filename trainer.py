@@ -180,7 +180,7 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
             graph_model = True
 
         if enable_vae:
-            x, loss = train_step(nca, x0, t, t_aug, steps, optimizer, scheduler, writer, epoch, save_epoch)
+            x, loss = train_step_vae(nca, x0, t, t_aug, steps, optimizer, scheduler, writer, epoch, save_epoch)
         else:
             x, loss = train_step(nca, x0, t, steps, optimizer, scheduler)
 
