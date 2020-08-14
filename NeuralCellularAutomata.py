@@ -232,6 +232,7 @@ class NCADecoder(nn.Module):
         -------
             x torch.tensor: tensor of shape [batch_size, 16, 56, 56]
         '''
+
         x = self.fc1(x)
         x_recon = F.relu(self.fc2(x))
         x_recon = x_recon.view(x_recon.size(0), 128, self.h, self.w)
@@ -308,7 +309,7 @@ class NCAVariationalAutoencoder(nn.Module):
 
 
 class ConditionalNCA(nn.Module):
-    def __init__(self, device, num_emojis, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 5, output_channel = 16):
+    def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 5, output_channel = 16):
         super(ConditionalNCA, self).__init__()
         assert fire_rate > 0 and fire_rate <= 1
 
