@@ -487,8 +487,11 @@ class ConditionalNCA(nn.Module):
         for step in range(steps):
             x = self.update(x, encoding, fire_rate, angle, step_size)
 
-        if self.enable_vae:
-            return x, x_recon, latent_mu, latent_logvar
+        if self.training:
+            if self.enable_vae:
+                return x, x_recon, latent_mu, latent_logvar
+            else:
+                return x
         else:
             return x
     
@@ -505,6 +508,7 @@ class ConditionalNCA(nn.Module):
         """
         assert self.enable_vae, 'Interpolation only available in VAE mode'
         assert t.size(0) == 2, 'Linear interpolation only available for 2 emojis. input t must be shape [2, 4, w, h]'
+        assert r <= 1 and r >= 0, 'r must lie between 0 and 1'
 
         self.eval() # This is to be run only in eval mode and not for training
 
