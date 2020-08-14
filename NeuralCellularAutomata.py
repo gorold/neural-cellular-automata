@@ -285,29 +285,6 @@ class NCAVariationalAutoencoder(nn.Module):
         else:
             return mu
 
-# class NCAEncodingNormal(nn.Module):
-#     def __init__(self):
-#         super(NCAEncodingNormal, self).__init__()
-
-#         self.body = nn.Sequential(OrderedDict([
-#             ('conv1', nn.Conv2d(4, 8, 7, stride=3, padding=1)),
-#             ('relu1', nn.ReLU()),
-#             ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=0)),
-#             ('relu2', nn.ReLU()),
-#             ('adaptive_mp', nn.AdaptiveMaxPool2d(4)), # 4 x 4 x 16 = 256
-#             ('flatten', nn.Flatten()),
-#             ('fc1', nn.Linear(256, 128)),
-#             ('relu3', nn.ReLU()),
-#             ('fc2', nn.Linear(128, 16)),
-#         ]))
-    
-#     def forward(self, x):
-#         x = self.body(x)
-#         x = x.view(x.size(0), -1, 1, 1)
-#         x = x.expand(-1, -1, 56, 56)
-#         return x
-
-
 class ConditionalNCA(nn.Module):
     def __init__(self, device, channel_n=16, fire_rate=0.5, hidden_size=128, enable_vae = False, latent_dims = 5, output_channel = 16):
         super(ConditionalNCA, self).__init__()
@@ -489,6 +466,10 @@ class ConditionalNCA(nn.Module):
         -------
         x torch.tensor:
             Shape (batch, channel_n, h, w)
+        
+        if using VAE
+        x_recon torch.tensor:
+            Shape (batch, 4, h, w)
         mu torch.tensor:
             Shape (batch, latent_dims)
         logvar torch.tensor:
@@ -506,20 +487,32 @@ class ConditionalNCA(nn.Module):
         for step in range(steps):
             x = self.update(x, encoding, fire_rate, angle, step_size)
 
-        if self.training:
-            if self.enable_vae:
-                return x, x_recon, latent_mu, latent_logvar
-            else:
-                return x
+        if self.enable_vae:
+            return x, x_recon, latent_mu, latent_logvar
         else:
             return x
     
-    def interpolate(self, x, z, steps = 1):
+    def interpolate(self, t, r = 0.5):
+        """
+        Interpolates between two emojis depending on ratio r to create tensor z. Returns the encoding for that tensor
+        ----------
+        target: tensor, (batch, 4, h, w)
+
+        Returns
+        -------
+        encoding torch.tensor:
+            Shape (1, channel_n, h, w)
+        """
         assert self.enable_vae, 'Interpolation only available in VAE mode'
+        assert t.size(0) == 2, 'Linear interpolation only available for 2 emojis. input t must be shape [2, 4, w, h]'
 
-        encoding, x_record = self.encoder.decoder(z)
+        self.eval() # This is to be run only in eval mode and not for training
 
-        for step in range(steps):
-            x = self.update(x, encoding, self.fire_rate, angle=0.0, step_size = 1.0)
+        mu, _ = self.encoder.encoder(t)
+        mu = mu.detach().cpu()
+        mu = torch.split(mu,1)
 
-        return x, x_record
+        z = r*mu[0] + (1- r) * mu[1]
+        encoding, _ = self.encoder.decoder(z)
+
+        return encoding
