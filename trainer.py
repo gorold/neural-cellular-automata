@@ -53,6 +53,40 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, split=8):
 
     return x, float(loss)
 
+def train_step_vae(nca, x0, target, t_aug, steps, optimizer, scheduler, writer, epoch, save_epoch, split=8):
+    nca.train()
+    xs = []
+    x_recons = []
+    total_loss = 0
+    for x, t, t_o in zip(torch.split(x0, split), torch.split(target, split), torch.split(t_aug, split)):
+        x, x_recon, mu, logvar = nca(x, t_o, steps=steps)
+        mse_loss = F.mse_loss(to_rgba(x), t, reduction='sum')
+        vae_mse_loss = F.mse_loss(x_recon, t_o, reduction='sum')
+        kld_loss = 1*(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()))
+        loss = (mse_loss + kld_loss + vae_mse_loss)
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+        xs.append(x)
+        x_recons.append(x_recon)
+        total_loss += loss.detach().cpu()
+    
+    x = torch.cat(xs, dim=0)
+    x_recon = torch.cat(x_recons, dim=0)
+
+    if epoch % save_epoch == 0:
+        writer.add_image('VAE_Progress', make_grid(x_recon), global_step = epoch)
+        writer.add_image('VAE_Targets', make_grid(t_aug), global_step = epoch)
+    total_loss /= x0.size(0)
+    writer.add_scalar('MSE loss', mse_loss.detach().item(), epoch)
+    writer.add_scalar('VAE MSE loss', vae_mse_loss.detach().item(), epoch)
+    writer.add_scalar('KLD loss', kld_loss.detach().item(), epoch)
+
+    return x, float(loss)
+
 def pool_train(nca, target, optimizer, scheduler, epochs, device, steps_low, steps_high, pool_size, batch_size, damage_n, fig_dir, model_path, save_epoch=100):
     """
     Training procedure using the 'sample pool' training strategy.
@@ -102,7 +136,7 @@ def pool_train(nca, target, optimizer, scheduler, epochs, device, steps_low, ste
 
             start_epoch += save_epoch
 
-def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, steps_low, steps_high, pool_size, batch_size, damage_n, fig_dir, model_path, save_epoch=100):
+def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, steps_low, steps_high, pool_size, batch_size, damage_n, fig_dir, model_path, enable_vae, save_epoch=100):
     """
     targets: dict[str->tensor]
         Dict mapping target class name to tensor of size (4, h, w).
@@ -140,10 +174,16 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
 
         x0 = batch.x_tensor # already on cuda
         t = batch.targets_tensor.to(device)
+        
         if not graph_model:
             writer.add_graph(nca, (torch.rand_like(x0), torch.rand_like(t)))
             graph_model = True
-        x, loss = train_step(nca, x0, t, steps, optimizer, scheduler)
+
+        if enable_vae:
+            t_aug = batch.targets_augmented.to(device)
+            x, loss = train_step_vae(nca, x0, t, t_aug, steps, optimizer, scheduler, writer, epoch, save_epoch)
+        else:
+            x, loss = train_step(nca, x0, t, steps, optimizer, scheduler)
 
         batch.replace(x.detach().cpu())
         batch.commit()

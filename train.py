@@ -18,7 +18,7 @@ def get_options():
     parser.add_argument('--fig_dir', default='figures/', help='Where to save any figure/images to?')
     parser.add_argument('--save_epoch', default=100, type=int, help='Save figures and model every save_epoch epochs.')
     parser.add_argument('--conditional', action='store_true', help='Train regular GrowingNCA or ConditionalNCA.')
-    parser.add_argument('--train_dir', default='data/train', help='Directory to images to train on, for ConditionalNCA')
+    parser.add_argument('--train_dir', default='data/train_vae', help='Directory to images to train on, for ConditionalNCA')
     parser.add_argument('--model_name', default='nca', help='Name your model!')
 
     # NCA model options
@@ -34,12 +34,16 @@ def get_options():
     parser.add_argument('--damage_n', default=3, type=int, help='Number of damaged samples per batch.')
     parser.add_argument('--epochs', default=8000, type=int, help='Number of epochs to train.')
     parser.add_argument('--cuda', action='store_true', help='Enables cuda.')
+    parser.add_argument('--vae', action='store_true', help='Enables VAE.')
 
     # Optimizer options
     parser.add_argument('--lr', default=0.001, type=float, help='Adam optimizer learning rate.')
     parser.add_argument('--beta1', default=0.5, type=float, help='Adam optimizer beta1.')
     parser.add_argument('--beta2', default=0.5, type=float, help='Adam optimizer beta2.')
     parser.add_argument('--gamma', default=0.9999, type=float, help='Exponential LR scheduler gamma discount factor.')
+
+    # VAE options
+    parser.add_argument('--latent_dims', default=5, type=int, help='Dimension of latent vector in VAE')
 
     opt = parser.parse_args()
 
@@ -91,7 +95,7 @@ def run():
 
     if opt.conditional:
         target = load_emoji_dict(opt.train_dir)
-        nca = ConditionalNCA(device, channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size)
+        nca = ConditionalNCA(device, channel_n=opt.channel_n, fire_rate=0.5, hidden_size=opt.hidden_size, enable_vae=opt.vae, latent_dims=opt.latent_dims)
         train_func = conditional_pool_train
     else:
         target = load_emoji(opt.emoji)
@@ -115,6 +119,7 @@ def run():
         opt.damage_n,
         fig_dir,
         model_path,
+        opt.vae
     ]
 
     kwargs = {

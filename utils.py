@@ -225,3 +225,8 @@ class GCDebug:
             except:
                 pass
         self.count += 1
+
+def show(img):
+    plt.figure(figsize = (25,10))
+    npimg = img.numpy()
+    plt.imshow(np.transpose(npimg, (1,2,0)), interpolation='nearest')
