@@ -474,7 +474,7 @@ class ConditionalNCA(nn.Module):
         else:
             encoding = self.encoder(target)
             encoding = encoding.view(x.size(0), -1, 1, 1)
-            encoding = encoding.expand(-1, -1, 56, 56)
+            encoding = encoding.expand(-1, -1, target.size(2), target.size(3))
             return encoding
 
     def forward(self, x, target, encoding=None, steps=1, fire_rate=None, angle=0.0, step_size=1.0):

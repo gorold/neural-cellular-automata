@@ -29,26 +29,41 @@ def rank_losses(x, target):
     loss = torch.mean(torch.pow(to_rgba(x) - target, 2), dim=[1, 2, 3]).detach().cpu()
     return torch.argsort(loss, descending=True)
 
-def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer, epoch, t_aug, split=8):
+def train_step(nca, x0, target, steps, optimizer, scheduler, split=8):
+    nca.train()
+    xs = []
+    total_loss = 0
+    for x, t in zip(torch.split(x0, split), torch.split(target, split)):
+        if isinstance(nca, GrowingNCA):
+            x = nca(x, steps=steps)
+        elif isinstance(nca, ConditionalNCA):
+            x = nca(x, t, steps=steps)
+        
+        loss = F.mse_loss(to_rgba(x), t)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+
+        xs.append(x)
+        total_loss += loss.detach().cpu()
+    
+    x = torch.cat(xs, dim=0)
+    total_loss /= x0.size(0)
+
+    return x, float(loss)
+
+def train_step_vae(nca, x0, target, t_aug, steps, optimizer, scheduler, writer, epoch, save_epoch, split=8):
     nca.train()
     xs = []
     x_recons = []
     total_loss = 0
     for x, t, t_o in zip(torch.split(x0, split), torch.split(target, split), torch.split(t_aug, split)):
-        if isinstance(nca, GrowingNCA):
-            x = nca(x, steps=steps)
-            loss = F.mse_loss(to_rgba(x), t)
-        elif isinstance(nca, ConditionalNCA):
-            if enable_vae:
-                x, x_recon, mu, logvar = nca(x, t_o, steps=steps)
-                mse_loss = F.mse_loss(to_rgba(x), t, reduction='sum')
-                vae_mse_loss = F.mse_loss(x_recon, t_o, reduction='sum')
-                kld_loss = 1*(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()))
-                loss = (mse_loss + kld_loss + vae_mse_loss)
-                
-            else:
-                x = nca(x, t, steps=steps)
-                loss = F.mse_loss(to_rgba(x), t)
+        x, x_recon, mu, logvar = nca(x, t_o, steps=steps)
+        mse_loss = F.mse_loss(to_rgba(x), t, reduction='sum')
+        vae_mse_loss = F.mse_loss(x_recon, t_o, reduction='sum')
+        kld_loss = 1*(-0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()))
+        loss = (mse_loss + kld_loss + vae_mse_loss)
         
         optimizer.zero_grad()
         loss.backward()
@@ -62,7 +77,8 @@ def train_step(nca, x0, target, steps, optimizer, scheduler, enable_vae, writer,
     
     x = torch.cat(xs, dim=0)
     x_recon = torch.cat(x_recons, dim=0)
-    if epoch % 5 == 0:
+
+    if epoch % save_epoch == 0:
         writer.add_image('VAE_Progress', make_grid(x_recon), global_step = epoch)
     total_loss /= x0.size(0)
     writer.add_scalar('MSE loss', mse_loss.detach().item(), epoch)
@@ -162,7 +178,11 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
         if not graph_model:
             writer.add_graph(nca, (torch.rand_like(x0), torch.rand_like(t_aug)))
             graph_model = True
-        x, loss = train_step(nca, x0, t, steps, optimizer, scheduler, enable_vae, writer, epoch, t_aug)
+
+        if enable_vae:
+            x, loss = train_step(nca, x0, t, t_aug, steps, optimizer, scheduler, writer, epoch, save_epoch)
+        else:
+            x, loss = train_step(nca, x0, t, steps, optimizer, scheduler)
 
         batch.replace(x.detach().cpu())
         batch.commit()
