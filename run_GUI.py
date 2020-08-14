@@ -12,12 +12,23 @@ from utils import make_seed, to_rgb, load_emoji_dict, pad_target
 from NeuralCellularAutomata import GrowingNCA, ConditionalNCA
 
 global device 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# if torch.cuda.is_available():
+#     device = torch.device('cuda:0')
+#     torch.cuda.set_device(device)
+# else:
+#     device = torch.device('cpu')
+
+device = torch.device('cpu')
 class Model(object):
-    def __init__(self, conditional = False, target = None):
+    def __init__(self, conditional = False, target = None, enable_vae = False):
         if conditional:
-            self.model = ConditionalNCA(device = device)
-            self.model.load_state_dict(torch.load(f'{os.getcwd()}/models/nca_1.pth'))
+            if enable_vae:
+                self.model = ConditionalNCA(device = device, enable_vae = True)
+                self.model.load_state_dict(torch.load(f'{os.getcwd()}/vNCA_Models/evolution.pth'))
+            else:
+                self.model = ConditionalNCA(device = device)
+                self.model.load_state_dict(torch.load(f'{os.getcwd()}/models/nca_1.pth'))
         else:
             self.model = GrowingNCA(device = device)
             self.model.load_state_dict(torch.load(f'{os.getcwd()}/models/nca_{target}.pth'))
@@ -49,7 +60,13 @@ class GUI(tk.Frame):
                                          'Curse Word': 'emoji_u1f92c.png', 
                                          'A little bit' : 'emoji_u1f90f_1f3fb.png', 
                                          'Shocked Face' : 'emoji_u1f62f.png'}
-    
+
+        self.vae_target = {k: pad_target(v) for k, v in load_emoji_dict('data/train_vae').items()}
+        self.vae_target_names = {'Germ' : 'emoji_u1f9a0.png', 
+                                 'Caterpillar': 'emoji_u1f41b.png', 
+                                 'Gorilla' : 'emoji_u1f98d.png', 
+                                 'Man':'emoji_u1f468_1f3fb_200d_1f9b1.png'}
+
         self.modelTarget = tk.StringVar()
         self.modelTarget.set("Select Model Target")
 
@@ -146,12 +163,14 @@ class GUI(tk.Frame):
     def change_vae(self):
         # Changes the dropdown box options to show the relevant options
         self.modelTarget.set("Select First Emoji")
+        self.select_model_target_label['text'] = 'Please select the first emoji:'
+        self.select_model_target['values'] = list(self.vae_target_names.keys())
+        
         self.modelTarget_two.set('Select Second Emoji')
         self.select_model_target_label_two.grid(row=6, column=0, sticky = 'NW')
-        self.select_model_target_label['text'] = 'Please select the second emoji:'
-        self.select_model_target['values'] = ['Smiley Face', 'Lizard', 'Explosion']
+        
         self.select_emoji_two.grid(row=7, column=0, sticky = 'SW')
-        self.select_emoji_two['values'] = ['test', '1', '2']
+        self.select_emoji_two['values'] = list(self.vae_target_names.keys())
         self.vae_scale.grid(row=8, column = 0)
 
     def onScale(self, val):
@@ -173,6 +192,9 @@ class GUI(tk.Frame):
             if self.current_modelType == 'conditional':
                 self.nca.x = self.nca.model(self.nca.x, None, self.conditional_encoding[self.conditional_target_names[self.current_modelTarget]])
                 out = np.transpose(to_rgb(self.nca.x).detach().cpu().numpy()[0], (1, 2, 0))
+            elif self.current_modelType == 'vae':
+                self.nca.x = self.nca.model(self.nca.x, None, self.interpolated_encoding)
+                out = np.transpose(to_rgb(self.nca.x).detach().cpu().numpy()[0], (1, 2, 0))
             else:
                 self.nca.x = self.nca.model(self.nca.x)
                 out = np.transpose(to_rgb(self.nca.x).detach().cpu().numpy()[0], (1, 2, 0))
@@ -184,15 +206,20 @@ class GUI(tk.Frame):
 
     def generate_model(self):
         # Function called when "generate" button is pressed
+
+        # Certain values that we want to save
         model_type = self.modelType.get()
         model_target = self.modelTarget.get()
 
         self.current_modelType = model_type
         self.current_modelTarget = model_target
 
+        # Will only initialise if we are using VAE
         try:
             model_target_two = self.modelTarget_two.get()
+            vae_slider_val = self.vae_slider_value.get()
             self.current_modelTarget_two = model_target_two
+            self.current_vae_slider_val = vae_slider_val
         except:
             pass
 
@@ -219,9 +246,11 @@ class GUI(tk.Frame):
                 for k, v in self.conditional_target.items():
                     self.conditional_encoding[k] = self.nca.model.get_encoding(v.unsqueeze(0).to(device))
             elif model_type == 'vae':
-                # model_target_two
-                normal_model_target = {'Smiley Face': '2', 'Lizard' : '0', 'Explosion' : '3'}
-                self.nca = Model(target = normal_model_target[model_target])
+                self.nca = Model(conditional = True, enable_vae=True)
+                first_emoji_encoding = self.vae_target[self.vae_target_names[self.current_modelTarget]]
+                second_emoji_encoding = self.vae_target[self.vae_target_names[self.current_modelTarget_two]]
+                self.interpolated_encoding = self.nca.model.interpolate(torch.stack([first_emoji_encoding, second_emoji_encoding]).to(device), r = self.current_vae_slider_val/100.0)
+                
             else:
                 normal_model_target = {'Smiley Face': '2', 'Lizard' : '0', 'Explosion' : '3'}
                 self.nca = Model(target = normal_model_target[model_target])

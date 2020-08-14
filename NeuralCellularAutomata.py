@@ -451,7 +451,7 @@ class ConditionalNCA(nn.Module):
             return encoding, x_recon, latent_mu, latent_logvar
         else:
             encoding = self.encoder(target)
-            encoding = encoding.view(x.size(0), -1, 1, 1)
+            encoding = encoding.view(target.size(0), -1, 1, 1)
             encoding = encoding.expand(-1, -1, target.size(2), target.size(3))
             return encoding
 
