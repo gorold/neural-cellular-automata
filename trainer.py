@@ -79,6 +79,7 @@ def train_step_vae(nca, x0, target, t_aug, steps, optimizer, scheduler, writer, 
 
     if epoch % save_epoch == 0:
         writer.add_image('VAE_Progress', make_grid(x_recon), global_step = epoch)
+        writer.add_image('VAE_Targets', make_grid(t_aug), global_step = epoch)
     total_loss /= x0.size(0)
     writer.add_scalar('MSE loss', mse_loss.detach().item(), epoch)
     writer.add_scalar('VAE MSE loss', vae_mse_loss.detach().item(), epoch)
@@ -173,12 +174,13 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
 
         x0 = batch.x_tensor # already on cuda
         t = batch.targets_tensor.to(device)
-        t_aug = batch.targets_augmented.to(device)
+        
         if not graph_model:
-            writer.add_graph(nca, (torch.rand_like(x0), torch.rand_like(t_aug)))
+            writer.add_graph(nca, (torch.rand_like(x0), torch.rand_like(t)))
             graph_model = True
 
         if enable_vae:
+            t_aug = batch.targets_augmented.to(device)
             x, loss = train_step_vae(nca, x0, t, t_aug, steps, optimizer, scheduler, writer, epoch, save_epoch)
         else:
             x, loss = train_step(nca, x0, t, steps, optimizer, scheduler)
@@ -198,7 +200,6 @@ def conditional_pool_train(nca, targets, optimizer, scheduler, epochs, device, s
             viz_loss(losses[start_epoch-1:epoch-1], fig_dir, start_epoch, epoch) # from previous save point
 
             writer.add_image('CA_Progress', make_grid(to_rgb(x)), global_step = epoch)
-            writer.add_image('VAE_Targets', make_grid(t_aug), global_step = epoch)
             writer.add_image('CA_Targets', make_grid(t), global_step = epoch)
 
             # Save model
