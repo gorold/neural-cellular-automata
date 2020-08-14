@@ -34,6 +34,9 @@ class GUI(tk.Frame):
         self.interval_speed.set(1)
         self.mouse_clicked = False
 
+        self.vae_slider_value = tk.IntVar()
+        self.vae_slider_value.set(0)
+
         self.modelType = tk.StringVar() # Variable for model type
         self.modelType.set("conditional")
 
@@ -49,6 +52,9 @@ class GUI(tk.Frame):
     
         self.modelTarget = tk.StringVar()
         self.modelTarget.set("Select Model Target")
+
+        self.modelTarget_two = tk.StringVar()
+        self.modelTarget_two.set("Select Second Emoji")
         
         self.current_modelType = "conditional"
         self.current_modelTarget = "Select Model Target"
@@ -56,6 +62,10 @@ class GUI(tk.Frame):
         self.scale_labels = {}
         for i in range(1,6):
             self.scale_labels[i] = f"Speed: {i}x ({i} iterations/s)" 
+        
+        self.vae_scale_labels = {}
+        for i in range(101):
+            self.vae_scale_labels[i] = f"{i}% first emoji, {100-i}% second emoji" 
         
         # Add widgets
 
@@ -67,27 +77,41 @@ class GUI(tk.Frame):
         self.normal_button = ttk.Radiobutton(master = root, text="Normal Model", variable=self.modelType,
                                     value="normal", command=self.change_normal)
         self.normal_button.grid(row=2, column=0, sticky = 'NW')
+        self.vae_button = ttk.Radiobutton(master = root, text="VAE Model", variable=self.modelType,
+                                    value="vae", command=self.change_vae)
+        self.vae_button.grid(row=3, column=0, sticky = 'NW')
 
         # Dropdown box to choose target for corresponding model
-        tk.Label(master= root, text = 'Please choose the model target:').grid(row=3, column=0, sticky = 'NW')
+        self.select_model_target_label = tk.Label(master= root, text = 'Please choose the model target:')
+        self.select_model_target_label.grid(row=4, column=0, sticky = 'NW')
+
         self.select_model_target = ttk.Combobox(master= root, justify = tk.LEFT, width = 35, textvariable = self.modelTarget, state = 'readonly')
-        self.select_model_target.grid(row=4, column=0, sticky = 'SW')
+        self.select_model_target.grid(row=5, column=0, sticky = 'SW')
+        
+        self.select_model_target_label_two = tk.Label(master= root, text = 'Please choose the second emoji:')
+        self.select_model_target_label_two.grid(row=6, column=0, sticky = 'NW')
+
+        self.select_emoji_two = ttk.Combobox(master= root, justify = tk.LEFT, width = 35, textvariable = self.modelTarget_two, state = 'readonly')
+        self.select_emoji_two.grid(row=7, column=0, sticky = 'SW')
+        
+        self.vae_scale = tk.Scale(master= root, from_=0, to= 100, command=self.onScale_vae, orient = tk.HORIZONTAL, tickinterval= 100, length=400, showvalue = 0, label = self.vae_scale_labels[0])
+        self.vae_scale.grid(row=8, column = 0)
 
         # Generate Button
         self.generate_button = tk.Button(master=root, text="Generate", command=self.generate_model)
-        self.generate_button.grid(row=5, column= 0, sticky = 'W')
+        self.generate_button.grid(row=9, column= 0, sticky = 'W')
 
         # Refresh Button
         self.refresh_button = tk.Button(master=root, text = 'Refresh', command = self.refresh_x, state=tk.DISABLED)
-        self.refresh_button.grid(row = 5, column = 1, sticky = 'W')
+        self.refresh_button.grid(row = 9, column = 1, sticky = 'W')
 
         # Speed Scale
         self.scale = tk.Scale(master= root, from_=1, to= 5, command=self.onScale, orient = tk.HORIZONTAL, tickinterval= 1, length=400, showvalue = 0, label = self.scale_labels[1])
-        self.scale.grid(row=7, column = 0)
+        self.scale.grid(row=11, column = 0)
 
         # Quit Button
         self.quit_button = tk.Button(master=root, text="Quit", command=self._quit)
-        self.quit_button.grid(row=7, column= 1)
+        self.quit_button.grid(row=11, column= 1)
 
         # Plot initial README canvas and set up options
         self.fig = plt.figure(figsize=(5, 5), dpi=100)
@@ -96,25 +120,50 @@ class GUI(tk.Frame):
         plt.imshow(image)
         plt.axis('off')
         self.canvas = FigureCanvasTkAgg(self.fig, master=root)
-        self.canvas.get_tk_widget().grid(row=6, columnspan = 2)
+        self.canvas.get_tk_widget().grid(row=10, columnspan = 2)
         self.change_conditional()
 
     def change_conditional(self):
+        self.select_model_target.grid(row=5, column=0, sticky = 'SW')
+        self.select_model_target_label['text'] = 'Please choose the model target:'
+        self.select_model_target_label_two.grid_remove()
+        self.select_emoji_two.grid_remove()
+        self.vae_scale.grid_remove()
         # Changes the dropdown box options to show the relevant options
         self.modelTarget.set("Select Model Target")
-        
         self.select_model_target['values'] = list(self.conditional_target_names.keys())
 
     def change_normal(self):
+        self.select_model_target.grid(row=5, column=0, sticky = 'SW')
+        self.select_model_target_label['text'] = 'Please choose the model target:'
+        self.select_model_target_label_two.grid_remove()
+        self.select_emoji_two.grid_remove()
+        self.vae_scale.grid_remove()
         # Changes the dropdown box options to show the relevant options
         self.modelTarget.set("Select Model Target")
         self.select_model_target['values'] = ['Smiley Face', 'Lizard', 'Explosion']
+
+    def change_vae(self):
+        # Changes the dropdown box options to show the relevant options
+        self.modelTarget.set("Select First Emoji")
+        self.modelTarget_two.set('Select Second Emoji')
+        self.select_model_target_label_two.grid(row=6, column=0, sticky = 'NW')
+        self.select_model_target_label['text'] = 'Please select the second emoji:'
+        self.select_model_target['values'] = ['Smiley Face', 'Lizard', 'Explosion']
+        self.select_emoji_two.grid(row=7, column=0, sticky = 'SW')
+        self.select_emoji_two['values'] = ['test', '1', '2']
+        self.vae_scale.grid(row=8, column = 0)
 
     def onScale(self, val):
         # Set speed of scale
         v = int(val)
         self.interval_speed.set(v)
         self.scale.config(label=self.scale_labels[v])
+
+    def onScale_vae(self, val):
+        v = int(val)
+        self.vae_slider_value.set(v)
+        self.vae_scale.config(label=self.vae_scale_labels[v])
 
     def update_plot(self):
         # Updates plot by passing through the current image (x) into the NCA model
@@ -130,7 +179,7 @@ class GUI(tk.Frame):
         plt.imshow((out * 255).astype(np.uint8))
         plt.axis('off')
         self.canvas.draw()
-        self.canvas.get_tk_widget().grid(row=6, columnspan=3)
+        self.canvas.get_tk_widget().grid(row=10, columnspan=3)
         self.after(int(1000/self.interval_speed.get()), self.update_plot) # how often you want to refresh
 
     def generate_model(self):
@@ -140,6 +189,12 @@ class GUI(tk.Frame):
 
         self.current_modelType = model_type
         self.current_modelTarget = model_target
+
+        try:
+            model_target_two = self.modelTarget_two.get()
+            self.current_modelTarget_two = model_target_two
+        except:
+            pass
 
         # If invalid selection, show error message, prompt user to choose correct option and regenerate
         if model_target == 'Select Model Target':
@@ -163,6 +218,10 @@ class GUI(tk.Frame):
                 self.conditional_encoding = {}
                 for k, v in self.conditional_target.items():
                     self.conditional_encoding[k] = self.nca.model.get_encoding(v.unsqueeze(0).to(device))
+            elif model_type == 'vae':
+                # model_target_two
+                normal_model_target = {'Smiley Face': '2', 'Lizard' : '0', 'Explosion' : '3'}
+                self.nca = Model(target = normal_model_target[model_target])
             else:
                 normal_model_target = {'Smiley Face': '2', 'Lizard' : '0', 'Explosion' : '3'}
                 self.nca = Model(target = normal_model_target[model_target])
@@ -217,7 +276,7 @@ def on_closing():
 if __name__ == "__main__":
     root = tk.Tk()
     GUI(root)
-    root.geometry("500x700")
+    root.geometry("500x825")
     root.wm_title("Neural Cellular Automata")
     root.iconbitmap(f"{os.getcwd()}/assets/emoji_u1f44c.ico")
     root.resizable(width=False, height=False)
