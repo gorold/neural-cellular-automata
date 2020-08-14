@@ -71,8 +71,7 @@ def train_step_vae(nca, x0, target, t_aug, steps, optimizer, scheduler, writer, 
         scheduler.step()
 
         xs.append(x)
-        if enable_vae:
-            x_recons.append(x_recon)
+        x_recons.append(x_recon)
         total_loss += loss.detach().cpu()
     
     x = torch.cat(xs, dim=0)
