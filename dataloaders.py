@@ -5,6 +5,53 @@ import torch.optim as optim
 import numpy as np
 
 from utils import *
+import torchvision
+from albumentations import (
+    HorizontalFlip,
+    VerticalFlip,
+    Resize,
+    Cutout,
+    Normalize,
+    Compose,
+    GaussNoise,
+    IAAAdditiveGaussianNoise,
+    RandomContrast,
+    RandomGamma,
+    RandomRotate90,
+    RandomSizedCrop,
+    RandomBrightness,
+    Resize,
+    ShiftScaleRotate,
+    MotionBlur,
+    MedianBlur,
+    Blur,
+    OpticalDistortion,
+    GridDistortion,
+    IAAPiecewiseAffine,
+    OneOf)
+
+def get_augmentations(img_size):
+    height, width = img_size
+    list_transforms = []
+    # list_transforms.append(HorizontalFlip())
+    # list_transforms.append(VerticalFlip())
+    list_transforms.append(
+        ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.05, rotate_limit=0, p=1),
+    )
+    list_transforms.append(
+        OneOf([
+            GaussNoise(),
+            IAAAdditiveGaussianNoise(),
+        ], p=0.5),
+    )
+    list_transforms.append(
+        OneOf([
+            RandomContrast(0.5),
+            RandomGamma(),
+            RandomBrightness(),
+        ], p=0.9),
+    )
+    return Compose(list_transforms)
 
 class SamplePool:
     """
@@ -119,3 +166,26 @@ class ConditionalSamplePool:
         if self._parent is None:
             raise TypeError("Should not obtain Parent SamplePool's targets.")
         return torch.cat([ConditionalSamplePool.t_container[k].unsqueeze(0).repeat(self._size, 1, 1, 1) for k in self._slot_names], dim=0)
+
+    @property
+    def targets_augmented(self):
+        """
+        Returns the targets one hot tensor of a sample in full tensor form of shape (num_emojis*batch_size, 4, h, w)
+        """
+        if self._parent is None:
+            raise TypeError("Should not obtain Parent SamplePool's targets.")
+
+        to_PIL = torchvision.transforms.Compose([torchvision.transforms.ToPILImage()])
+        to_tensor = torchvision.transforms.Compose([torchvision.transforms.ToTensor()])
+        
+        augmented_tensors = []
+        target_tensors = self.targets_tensor
+        augmentations = get_augmentations((56, 56))
+
+        for tensor in target_tensors:
+            img = to_PIL(tensor)
+            img = np.array(img)
+            augmented_image = augmentations(image = img)['image']
+            augmented_tensors.append(to_tensor(augmented_image))
+
+        return torch.stack(augmented_tensors)
