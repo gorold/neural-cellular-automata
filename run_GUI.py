@@ -308,6 +308,5 @@ if __name__ == "__main__":
     root.geometry("500x825")
     root.wm_title("Neural Cellular Automata")
     root.iconbitmap(f"{os.getcwd()}/assets/emoji_u1f44c.ico")
-    root.resizable(width=False, height=False)
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
