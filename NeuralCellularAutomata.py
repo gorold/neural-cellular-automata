@@ -219,7 +219,6 @@ class NCADecoder(nn.Module):
             ('relu1', nn.LeakyReLU()),
             ('conv2', nn.ConvTranspose2d(32, 4, 4, stride=2, padding=1)),
             ('norm2', nn.BatchNorm2d(4)),
-            ('relu2', nn.LeakyReLU()),
         ]))
         self.device = device
 
@@ -235,7 +234,7 @@ class NCADecoder(nn.Module):
         '''
         x = x.to(self.device)
         x = self.fc1(x)
-        x_recon = F.relu(self.fc2(x))
+        x_recon = F.leaky_relu(self.fc2(x))
         x_recon = x_recon.view(x_recon.size(0), 128, self.h, self.w)
         x_recon = torch.sigmoid(self.body(x_recon))
 
