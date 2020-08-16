@@ -243,10 +243,11 @@ class NCADecoder(nn.Module):
         return x, x_recon
 
 class NCAVariationalAutoencoder(nn.Module):
-    def __init__(self, latent_dims = 2, output_width = 56, output_height = 56, output_channel = 16):
+    def __init__(self, device, latent_dims = 2, output_width = 56, output_height = 56, output_channel = 16):
         super(NCAVariationalAutoencoder, self).__init__()
         self.encoder = NCAEncoder(latent_dims = latent_dims)
         self.decoder = NCADecoder(latent_dims = latent_dims, height = output_height, width = output_width, output_channel = output_channel)
+        self.device = device
     
     def forward(self, x):
         '''
@@ -281,7 +282,7 @@ class NCAVariationalAutoencoder(nn.Module):
             # the reparameterization trick
             std = logvar.mul(0.5).exp_()
             eps = torch.empty_like(std).normal_() #define normal distribution
-            return eps.mul(std).add_(mu) #sample from normal distribution
+            return eps.mul(std).add_(mu).to(self.device) #sample from normal distribution
         else:
             return mu
 
@@ -293,7 +294,7 @@ class ConditionalNCA(nn.Module):
         self.enable_vae = enable_vae
 
         if enable_vae:
-            self.encoder = NCAVariationalAutoencoder(latent_dims = latent_dims, output_channel=output_channel)
+            self.encoder = NCAVariationalAutoencoder(device = device, latent_dims = latent_dims, output_channel=output_channel)
         else:
             self.encoder = nn.Sequential(OrderedDict([
                 ('conv1', nn.Conv2d(4, 8, 7, stride=3, padding=1)),
