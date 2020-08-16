@@ -203,7 +203,7 @@ class NCAEncoder(nn.Module):
         return x_mu, x_logvar
 
 class NCADecoder(nn.Module):
-    def __init__(self, latent_dims = 2, height = 56, width = 56, output_channel = 16):
+    def __init__(self, device, latent_dims = 2, height = 56, width = 56, output_channel = 16):
         super(NCADecoder, self).__init__()
 
         assert height % 4 == 0 and width % 4 == 0, 'Height and Width need to be divisible by 4'
@@ -221,6 +221,7 @@ class NCADecoder(nn.Module):
             ('norm2', nn.BatchNorm2d(4)),
             ('relu2', nn.LeakyReLU()),
         ]))
+        self.device = device
 
     def forward(self, x):
         '''
@@ -232,7 +233,7 @@ class NCADecoder(nn.Module):
         -------
             x torch.tensor: tensor of shape [batch_size, 16, 56, 56]
         '''
-
+        x = x.to(self.device)
         x = self.fc1(x)
         x_recon = F.relu(self.fc2(x))
         x_recon = x_recon.view(x_recon.size(0), 128, self.h, self.w)
@@ -246,7 +247,7 @@ class NCAVariationalAutoencoder(nn.Module):
     def __init__(self, device, latent_dims = 2, output_width = 56, output_height = 56, output_channel = 16):
         super(NCAVariationalAutoencoder, self).__init__()
         self.encoder = NCAEncoder(latent_dims = latent_dims)
-        self.decoder = NCADecoder(latent_dims = latent_dims, height = output_height, width = output_width, output_channel = output_channel)
+        self.decoder = NCADecoder(device = device, latent_dims = latent_dims, height = output_height, width = output_width, output_channel = output_channel)
         self.device = device
     
     def forward(self, x):
