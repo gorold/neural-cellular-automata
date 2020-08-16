@@ -13,13 +13,11 @@ from NeuralCellularAutomata import GrowingNCA, ConditionalNCA
 
 global device 
 
-# if torch.cuda.is_available():
-#     device = torch.device('cuda:0')
-#     torch.cuda.set_device(device)
-# else:
-#     device = torch.device('cpu')
-
-device = torch.device('cpu')
+if torch.cuda.is_available():
+    device = torch.device('cuda:0')
+    torch.cuda.set_device(device)
+else:
+    device = torch.device('cpu')
 class Model(object):
     def __init__(self, conditional = False, target = None, enable_vae = False):
         if conditional:
@@ -49,7 +47,7 @@ class GUI(tk.Frame):
         self.vae_slider_value.set(0)
 
         self.modelType = tk.StringVar() # Variable for model type
-        self.modelType.set("conditional")
+        self.modelType.set("normal")
 
         self.conditional_target = {k: pad_target(v) for k, v in load_emoji_dict('data/train').items()}
         self.conditional_target_names = {'Shower head' : 'emoji_u1f6bf.png', 
@@ -73,7 +71,7 @@ class GUI(tk.Frame):
         self.modelTarget_two = tk.StringVar()
         self.modelTarget_two.set("Select Second Emoji")
         
-        self.current_modelType = "conditional"
+        self.current_modelType = "normal"
         self.current_modelTarget = "Select Model Target"
 
         self.scale_labels = {}
@@ -87,13 +85,15 @@ class GUI(tk.Frame):
         # Add widgets
 
         # Radio Button to choose type of model
-        tk.Label(master= root, text = 'Please choose the type of model:').grid(row=0, column=0, sticky = 'NW')        
-        self.conditional_button = ttk.Radiobutton(master = root, text="Conditional Model", variable=self.modelType,
-                            value="conditional", command=self.change_conditional)
-        self.conditional_button.grid(row=1, column=0, sticky = 'NW')
+        tk.Label(master= root, text = 'Please choose the type of model:').grid(row=0, column=0, sticky = 'NW')
         self.normal_button = ttk.Radiobutton(master = root, text="Normal Model", variable=self.modelType,
                                     value="normal", command=self.change_normal)
-        self.normal_button.grid(row=2, column=0, sticky = 'NW')
+        self.normal_button.grid(row=1, column=0, sticky = 'NW')
+
+        self.conditional_button = ttk.Radiobutton(master = root, text="Conditional Model", variable=self.modelType,
+                            value="conditional", command=self.change_conditional)
+        self.conditional_button.grid(row=2, column=0, sticky = 'NW')
+        
         self.vae_button = ttk.Radiobutton(master = root, text="VAE Model", variable=self.modelType,
                                     value="vae", command=self.change_vae)
         self.vae_button.grid(row=3, column=0, sticky = 'NW')
@@ -138,7 +138,7 @@ class GUI(tk.Frame):
         plt.axis('off')
         self.canvas = FigureCanvasTkAgg(self.fig, master=root)
         self.canvas.get_tk_widget().grid(row=10, columnspan = 2)
-        self.change_conditional()
+        self.change_normal()
 
     def change_conditional(self):
         self.select_model_target.grid(row=5, column=0, sticky = 'SW')
