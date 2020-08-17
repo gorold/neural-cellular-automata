@@ -159,17 +159,17 @@ class NCAEncoder(nn.Module):
         super(NCAEncoder, self).__init__()
         self.body = nn.Sequential(OrderedDict([
             ('conv1', nn.Conv2d(4, 8, 3, stride=1, padding=1)),
-            ('norm1', nn.BatchNorm2d(8)),
             ('relu1', nn.LeakyReLU()),
+            ('norm1', nn.BatchNorm2d(8)),
             ('conv2', nn.Conv2d(8, 16, 3, stride=1, padding=1)),
-            ('norm2', nn.BatchNorm2d(16)),
             ('relu2', nn.LeakyReLU()),
+            ('norm2', nn.BatchNorm2d(16)),
             ('conv3', nn.Conv2d(16, 32, 3, stride=1, padding=1)),
-            ('norm3', nn.BatchNorm2d(32)),
             ('relu3', nn.LeakyReLU()),
+            ('norm3', nn.BatchNorm2d(32)),
             ('conv4', nn.Conv2d(32, 64, 3, stride=1, padding=1)),
-            ('norm4', nn.BatchNorm2d(64)),
             ('relu4', nn.LeakyReLU()),
+            ('norm4', nn.BatchNorm2d(64)),
             ('adaptive_mp', nn.AdaptiveMaxPool2d(2)), # 2 x 2 x 64 = 1024
             ('flatten', nn.Flatten())
         ]))
@@ -215,9 +215,10 @@ class NCADecoder(nn.Module):
         self.fc2 = nn.Linear(output_channel, out_features = 128*self.h*self.w)
         self.body = nn.Sequential(OrderedDict([
             ('conv1', nn.ConvTranspose2d(128, 32, 4, stride=2, padding=1)),
-            ('norm1', nn.BatchNorm2d(32)),
             ('relu1', nn.LeakyReLU()),
+            ('norm1', nn.BatchNorm2d(32)),
             ('conv2', nn.ConvTranspose2d(32, 4, 4, stride=2, padding=1)),
+            ('relu2', nn.LeakyReLU()),
             ('norm2', nn.BatchNorm2d(4)),
         ]))
         self.device = device
@@ -233,7 +234,7 @@ class NCADecoder(nn.Module):
             x torch.tensor: tensor of shape [batch_size, 16, 56, 56]
         '''
         x = x.to(self.device)
-        x = self.fc1(x)
+        x = F.leaky_relu(self.fc1(x))
         x_recon = F.leaky_relu(self.fc2(x))
         x_recon = x_recon.view(x_recon.size(0), 128, self.h, self.w)
         x_recon = torch.sigmoid(self.body(x_recon))
